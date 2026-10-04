@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fantasy Football Tracker</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --card: #171a21;
+    --card2: #1e222b;
+    --border: #2a2f3a;
+    --text: #e8eaed;
+    --text-dim: #9aa0ab;
+    --accent: #4f8cff;
+    --green: #34c759;
+    --red: #ff5b5b;
+    --amber: #ffb84f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 20px 16px 60px;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: var(--text-dim); font-size: 13px; margin-bottom: 16px; }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .toolbar button {
+    background: var(--card2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 6px 12px; font-size: 12px; cursor: pointer;
+  }
+  .toolbar button:hover { border-color: var(--accent); color: var(--accent); }
+  .toolbar input[type=file] { display: none; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid var(--border); align-items: center; }
+  .tab {
+    padding: 10px 14px; cursor: pointer; font-size: 14px; color: var(--text-dim);
+    border-bottom: 2px solid transparent; user-select: none;
+  }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  .week-select {
+    margin-left: auto; background: var(--card2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 5px 8px; font-size: 13px;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; margin-bottom: 14px;
+  }
+  .league-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .league-header .lname { font-size: 16px; font-weight: 600; }
+  .section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin: 12px 0 6px; }
+  .player-row {
+    display: flex; align-items: center; gap: 8px; padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .player-row:last-child { border-bottom: none; }
+  .player-name { flex: 1; font-size: 14px; }
+  .player-meta { font-size: 12px; color: var(--text-dim); }
+  .badge {
+    font-size: 11px; padding: 2px 7px; border-radius: 999px; font-weight: 600; white-space: nowrap;
+  }
+  .badge.for { background: rgba(52,199,89,0.15); color: var(--green); }
+  .badge.against { background: rgba(255,91,91,0.15); color: var(--red); }
+  .add-row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .add-row input, .add-row select {
+    background: var(--card2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 6px 8px; font-size: 13px;
+  }
+  .add-row input.name { flex: 1; min-width: 100px; }
+  .add-row input.team { width: 56px; text-transform: uppercase; }
+  .add-row select { width: 66px; }
+  .add-row button {
+    background: var(--accent); color: white; border: none; border-radius: 6px;
+    padding: 6px 12px; font-size: 13px; cursor: pointer; font-weight: 600;
+  }
+  .add-row button:hover { opacity: 0.9; }
+  .autocomplete-wrap { position: relative; margin-top: 8px; }
+  .search-input {
+    width: 100%; background: var(--card2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 8px 10px; font-size: 13px;
+  }
+  .search-input:focus { outline: none; border-color: var(--accent); }
+  .dropdown {
+    position: absolute; top: 100%; left: 0; right: 0; background: var(--card2);
+    border: 1px solid var(--border); border-radius: 8px; margin-top: 4px; max-height: 220px;
+    overflow-y: auto; z-index: 10;
+  }
+  .dropdown-item {
+    padding: 8px 10px; font-size: 13px; cursor: pointer; display: flex;
+    justify-content: space-between; gap: 8px; align-items: center;
+  }
+  .dropdown-item:hover, .dropdown-item.hl { background: rgba(255,255,255,0.06); }
+  .dropdown-item .meta { color: var(--text-dim); font-size: 12px; white-space: nowrap; }
+  .manual-toggle {
+    font-size: 11px; color: var(--text-dim); cursor: pointer; text-decoration: underline;
+    margin-top: 6px; display: inline-block;
+  }
+  .empty { color: var(--text-dim); font-size: 13px; text-align: center; padding: 16px 0; }
+  .empty.big { padding: 30px 0; font-size: 14px; }
+  .rm-x { cursor: pointer; color: var(--text-dim); font-size: 13px; padding: 0 4px; }
+  .rm-x:hover { color: var(--red); }
+  .loading { text-align: center; color: var(--text-dim); padding: 40px; }
+  .save-hint { font-size: 11px; color: var(--text-dim); text-align: center; margin-top: 20px; }
+  .game-card { margin-bottom: 14px; }
+  .game-title { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+  .game-time { font-size: 12px; color: var(--text-dim); margin-bottom: 10px; }
+  .game-cols { display: flex; gap: 14px; }
+  .game-col { flex: 1; min-width: 0; }
+  .game-col-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+  .game-col-label.for { color: var(--green); }
+  .game-col-label.against { color: var(--red); }
+  .cheer-line { font-size: 13px; padding: 3px 0; }
+  .cheer-line .league-tag { color: var(--text-dim); font-size: 11px; }
+  .clear-btn {
+    background: none; border: 1px solid var(--border); color: var(--text-dim);
+    border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer;
+  }
+  .clear-btn:hover { color: var(--red); border-color: var(--red); }
+  .header-btns { display: flex; gap: 6px; }
+  .games-toolbar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+  .filter-btn {
+    background: var(--card2); border: 1px solid var(--border); color: var(--text-dim);
+    border-radius: 20px; padding: 6px 14px; font-size: 12px; cursor: pointer;
+  }
+  .filter-btn.active { background: rgba(79,140,255,0.15); color: var(--accent); border-color: var(--accent); }
+  .summary-bar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .summary-stat {
+    background: var(--card2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 14px; flex: 1; min-width: 90px; text-align: center;
+  }
+  .summary-stat .num { font-size: 20px; font-weight: 700; }
+  .summary-stat .num.green { color: var(--green); }
+  .summary-stat .num.red { color: var(--red); }
+  .summary-stat .lbl { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px; }
+  .live-badge {
+    display: inline-flex; align-items: center; gap: 5px; background: rgba(255,91,91,0.15);
+    color: var(--red); font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+    margin-left: 8px; letter-spacing: 0.03em; vertical-align: middle;
+  }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--red); animation: pulse-dot 1.3s infinite; }
+  @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+  .final-badge {
+    display: inline-block; background: var(--card2); color: var(--text-dim); font-size: 10px;
+    font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-left: 8px; letter-spacing: 0.03em;
+  }
+  .verdict-badge {
+    font-size: 10px; padding: 2px 8px; border-radius: 999px; font-weight: 700; margin-left: 8px;
+    letter-spacing: 0.02em; vertical-align: middle;
+  }
+  .verdict-badge.win { background: rgba(52,199,89,0.15); color: var(--green); }
+  .verdict-badge.lose { background: rgba(255,91,91,0.15); color: var(--red); }
+  .verdict-badge.mixed { background: rgba(255,184,79,0.15); color: var(--amber); }
+  .game-card.is-live { border-color: rgba(255,91,91,0.4); }
+  .cheer-line {
+    cursor: pointer; user-select: none; border-radius: 6px; padding: 4px 6px; margin: 1px -6px;
+    transition: background 0.15s;
+  }
+  .cheer-line:hover { background: rgba(255,255,255,0.04); }
+  .cheer-line.scored { background: rgba(52,199,89,0.14); }
+  .cheer-line .check {
+    display: inline-block; width: 14px; text-align: center; color: var(--green); font-weight: 700;
+  }
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--card2); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 16px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity 0.2s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <h1>Fantasy tracker</h1>
+  <div class="sub">Plug in your starters and your opponents each week. Full 2026-27 season loaded &mdash; tap a player during games to check them off as they score.</div>
+  <div class="toolbar">
+    <button id="snapshot-btn">Download matchup snapshot</button>
+  </div>
+  <div class="tabs">
+    <div class="tab" data-tab="leagues">My starters</div>
+    <div class="tab active" data-tab="games">By game</div>
+    <select class="week-select" id="week-select"></select>
+  </div>
+  <div id="content"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+var LEAGUE_NAMES = ['RDL', 'DFL', 'Deloitte', 'Breezewood'];
+
+var BASELINE_ROSTERS = {
+  'RDL': [
+    {n: "Jayden Daniels", p: "QB", t: "WAS"},
+    {n: "D'Andre Swift", p: "RB", t: "CHI"},
+    {n: "Javonte Williams", p: "RB", t: "DAL"},
+    {n: "Ja'Marr Chase", p: "WR", t: "CIN"},
+    {n: "Chris Olave", p: "WR", t: "NO"},
+    {n: "Kyle Pitts", p: "TE", t: "ATL"},
+    {n: "Quentin Johnston", p: "WR", t: "LAC"},
+    {n: "Jacory Croskey-Merritt", p: "RB", t: "WAS"},
+    {n: "Deebo Samuel Sr.", p: "WR", t: "SF"}
+  ],
+  'DFL': [
+    {n: "Daniel Jones", p: "QB", t: "IND"},
+    {n: "Jonathan Taylor", p: "RB", t: "IND"},
+    {n: "Christian McCaffrey", p: "RB", t: "SF"},
+    {n: "CeeDee Lamb", p: "WR", t: "DAL"},
+    {n: "A.J. Brown", p: "WR", t: "NE"},
+    {n: "T.J. Hockenson", p: "TE", t: "MIN"},
+    {n: "Tetairoa McMillan", p: "WR", t: "CAR"},
+    {n: "Parker Washington", p: "WR", t: "JAX"},
+    {n: "Brandon Aubrey", p: "K", t: "DAL"},
+    {n: "Steelers D/ST", p: "DEF", t: "PIT"}
+  ],
+  'Deloitte': [
+    {n: "Jaxson Dart", p: "QB", t: "NYG"},
+    {n: "Breece Hall", p: "RB", t: "NYJ"},
+    {n: "Bucky Irving", p: "RB", t: "TB"},
+    {n: "Puka Nacua", p: "WR", t: "LA"},
+    {n: "CeeDee Lamb", p: "WR", t: "DAL"},
+    {n: "Brock Bowers", p: "TE", t: "LV"},
+    {n: "Emeka Egbuka", p: "WR", t: "TB"},
+    {n: "Bhayshul Tuten", p: "RB", t: "JAX"},
+    {n: "Jaylen Warren", p: "RB", t: "PIT"}
+  ],
+  'Breezewood': [
+    {n: "Jalen Hurts", p: "QB", t: "PHI"},
+    {n: "Quinshon Judkins", p: "RB", t: "CLE"},
+    {n: "Ja'Marr Chase", p: "WR", t: "CIN"},
+    {n: "Drake London", p: "WR", t: "ATL"},
+    {n: "Brock Bowers", p: "TE", t: "LV"},
+    {n: "Bhayshul Tuten", p: "RB", t: "JAX"},
+    {n: "Courtland Sutton", p: "WR", t: "DEN"},
+    {n: "Steelers D/ST", p: "DEF", t: "PIT"},
+    {n: "Chris Boswell", p: "K", t: "PIT"}
+  ]
+};
+
+var PLAYERS = [{n:"49ers D/ST",p:"DEF",t:"SF"},{n:"A.J. Brown",p:"WR",t:"NE"},{n:"AJ Barner",p:"TE",t:"SEA"},{n:"AJ Dillon",p:"RB",t:"CAR"},{n:"Aaron Jones",p:"RB",t:"MIN"},{n:"Aaron Rodgers",p:"QB",t:"PIT"},{n:"Adam Trautman",p:"TE",t:"DEN"},{n:"Adonai Mitchell",p:"WR",t:"NYJ"},{n:"Aidan O'Connell",p:"QB",t:"LV"},{n:"Alec Ingold",p:"RB",t:"LAC"},{n:"Alec Pierce",p:"WR",t:"IND"},{n:"Alvin Kamara",p:"RB",t:"NO"},{n:"Ameer Abdullah",p:"RB",t:"JAX"},{n:"Amon-Ra St. Brown",p:"WR",t:"DET"},{n:"Andre Szmyt",p:"K",t:"CLE"},{n:"Andrei Iosivas",p:"WR",t:"CIN"},{n:"Andrew Beck",p:"RB",t:"NYJ"},{n:"Andrew Ogletree",p:"TE",t:"IND"},{n:"Andy Borregales",p:"K",t:"NE"},{n:"Andy Dalton",p:"QB",t:"PHI"},{n:"Anthony Richardson",p:"QB",t:"IND"},{n:"Antonio Williams",p:"WR",t:"WAS"},{n:"Arian Smith",p:"WR",t:"NYJ"},{n:"Ashton Dulin",p:"WR",t:"IND"},{n:"Ashton Jeanty",p:"RB",t:"LV"},{n:"Athan Kaliakmanis",p:"QB",t:"WAS"},{n:"Audric Estim\u00e9",p:"RB",t:"NO"},{n:"Austin Hooper",p:"TE",t:"ATL"},{n:"Baker Mayfield",p:"QB",t:"TB"},{n:"Bam Knight",p:"RB",t:"ARI"},{n:"Barion Brown",p:"WR",t:"NO"},{n:"Bauer Sharp",p:"TE",t:"TB"},{n:"Bears D/ST",p:"DEF",t:"CHI"},{n:"Behren Morton",p:"QB",t:"NE"},{n:"Ben Sinnott",p:"TE",t:"WAS"},{n:"Ben Skowronek",p:"WR",t:"PIT"},{n:"Ben Yurosek",p:"TE",t:"MIN"},{n:"Bengals D/ST",p:"DEF",t:"CIN"},{n:"Bhayshul Tuten",p:"RB",t:"JAX"},{n:"Bijan Robinson",p:"RB",t:"ATL"},{n:"Bills D/ST",p:"DEF",t:"BUF"},{n:"Blake Corum",p:"RB",t:"LA"},{n:"Blake Grupe",p:"K",t:"NYJ"},{n:"Blake Whiteheart",p:"TE",t:"CLE"},{n:"Bo Melton",p:"WR",t:"GB"},{n:"Bo Nix",p:"QB",t:"DEN"},{n:"Brady Cook",p:"QB",t:"MIA"},{n:"Brady Russell",p:"RB",t:"SEA"},{n:"Braelon Allen",p:"RB",t:"NYJ"},{n:"Brandon Aubrey",p:"K",t:"DAL"},{n:"Brashard Smith",p:"RB",t:"KC"},{n:"Breece Hall",p:"RB",t:"NYJ"},{n:"Brenen Thompson",p:"WR",t:"LAC"},{n:"Brenton Strange",p:"TE",t:"JAX"},{n:"Brevin Jordan",p:"TE",t:"HOU"},{n:"Brevyn Spann-Ford",p:"TE",t:"DAL"},{n:"Brian Robinson",p:"RB",t:"ATL"},{n:"Brian Thomas Jr.",p:"WR",t:"JAX"},{n:"British Brooks",p:"RB",t:"HOU"},{n:"Brock Bowers",p:"TE",t:"LV"},{n:"Brock Purdy",p:"QB",t:"SF"},{n:"Brock Wright",p:"TE",t:"DET"},{n:"Broncos D/ST",p:"DEF",t:"DEN"},{n:"Browns D/ST",p:"DEF",t:"CLE"},{n:"Bryce Lance",p:"WR",t:"NO"},{n:"Bryce Young",p:"QB",t:"CAR"},{n:"Brycen Tremayne",p:"WR",t:"CAR"},{n:"Buccaneers D/ST",p:"DEF",t:"TB"},{n:"Bucky Irving",p:"RB",t:"TB"},{n:"C.J. Stroud",p:"QB",t:"HOU"},{n:"C.J. Williams",p:"WR",t:"JAX"},{n:"CJ Daniels",p:"WR",t:"LA"},{n:"Cade Klubnik",p:"QB",t:"NYJ"},{n:"Cade Otton",p:"TE",t:"TB"},{n:"Cade Stover",p:"TE",t:"HOU"},{n:"Cairo Santos",p:"K",t:"CHI"},{n:"Caleb Douglas",p:"WR",t:"MIA"},{n:"Caleb Williams",p:"QB",t:"CHI"},{n:"Calvin Ridley",p:"WR",t:"TEN"},{n:"Cam Little",p:"K",t:"JAX"},{n:"Cam Skattebo",p:"RB",t:"NYG"},{n:"Cam Ward",p:"QB",t:"TEN"},{n:"Camden Brown",p:"WR",t:"DAL"},{n:"Cameron Dicker",p:"K",t:"LAC"},{n:"Cameron Latu",p:"TE",t:"NE"},{n:"Cardinals D/ST",p:"DEF",t:"ARI"},{n:"Carnell Tate",p:"WR",t:"TEN"},{n:"Carsen Ryan",p:"TE",t:"CLE"},{n:"Carson Beck",p:"QB",t:"ARI"},{n:"Carson Wentz",p:"QB",t:"MIN"},{n:"Case Keenum",p:"QB",t:"CHI"},{n:"CeeDee Lamb",p:"WR",t:"DAL"},{n:"Chad Ryland",p:"K",t:"ARI"},{n:"Chargers D/ST",p:"DEF",t:"LAC"},{n:"Charlie Kolar",p:"TE",t:"LAC"},{n:"Charlie Woerner",p:"TE",t:"ATL"},{n:"Chase Brown",p:"RB",t:"CIN"},{n:"Chase McLaughlin",p:"K",t:"TB"},{n:"Chiefs D/ST",p:"DEF",t:"KC"},{n:"Chig Okonkwo",p:"TE",t:"WAS"},{n:"Chimere Dike",p:"WR",t:"TEN"},{n:"Chris Bell",p:"WR",t:"MIA"},{n:"Chris Blair",p:"WR",t:"ATL"},{n:"Chris Boswell",p:"K",t:"PIT"},{n:"Chris Brooks",p:"RB",t:"GB"},{n:"Chris Godwin Jr.",p:"WR",t:"TB"},{n:"Chris Manhertz",p:"TE",t:"NYG"},{n:"Chris Olave",p:"WR",t:"NO"},{n:"Chris Rodriguez Jr.",p:"RB",t:"JAX"},{n:"Christian McCaffrey",p:"RB",t:"SF"},{n:"Christian Watson",p:"WR",t:"GB"},{n:"Chuba Hubbard",p:"RB",t:"CAR"},{n:"Colbie Young",p:"WR",t:"CIN"},{n:"Colby Parkinson",p:"TE",t:"LA"},{n:"Cole Kmet",p:"TE",t:"CHI"},{n:"Cole Payton",p:"QB",t:"PHI"},{n:"Colson Yankoff",p:"TE",t:"WAS"},{n:"Colston Loveland",p:"TE",t:"CHI"},{n:"Colts D/ST",p:"DEF",t:"IND"},{n:"Commanders D/ST",p:"DEF",t:"WAS"},{n:"Connor Heyward",p:"RB",t:"LV"},{n:"Cooper Kupp",p:"WR",t:"SEA"},{n:"Cooper Rush",p:"QB",t:"ATL"},{n:"Corey Kiner",p:"RB",t:"NE"},{n:"Courtland Sutton",p:"WR",t:"DEN"},{n:"Cowboys D/ST",p:"DEF",t:"DAL"},{n:"Cyrus Allen",p:"WR",t:"KC"},{n:"D'Andre Swift",p:"RB",t:"CHI"},{n:"DJ Giddens",p:"RB",t:"IND"},{n:"DJ Herman",p:"RB",t:"MIA"},{n:"DJ Moore",p:"WR",t:"BUF"},{n:"DK Metcalf",p:"WR",t:"PIT"},{n:"Dak Prescott",p:"QB",t:"DAL"},{n:"Dallas Goedert",p:"TE",t:"PHI"},{n:"Dallen Bentley",p:"TE",t:"DEN"},{n:"Dalton Kincaid",p:"TE",t:"BUF"},{n:"Dalton Schultz",p:"TE",t:"HOU"},{n:"Daniel Bellinger",p:"TE",t:"TEN"},{n:"Daniel Carlson",p:"K",t:"NO"},{n:"Daniel Jones",p:"QB",t:"IND"},{n:"Dareke Young",p:"WR",t:"LV"},{n:"Darius Cooper",p:"WR",t:"PHI"},{n:"Darius Slayton",p:"WR",t:"NYG"},{n:"Darnell Mooney",p:"WR",t:"NYG"},{n:"Darnell Washington",p:"TE",t:"PIT"},{n:"Darren Waller",p:"TE",t:"CAR"},{n:"Davante Adams",p:"WR",t:"LA"},{n:"David Martin-Robinson",p:"TE",t:"TEN"},{n:"David Montgomery",p:"RB",t:"HOU"},{n:"David Njoku",p:"TE",t:"LAC"},{n:"Davis Allen",p:"TE",t:"LA"},{n:"Davis Mills",p:"QB",t:"HOU"},{n:"Dawson Knox",p:"TE",t:"BUF"},{n:"De'Von Achane",p:"RB",t:"MIA"},{n:"De'Zhaun Stribling",p:"WR",t:"SF"},{n:"DeMario Douglas",p:"WR",t:"NE"},{n:"DeVonta Smith",p:"WR",t:"PHI"},{n:"Deebo Samuel Sr.",p:"WR",t:"SF"},{n:"Deion Burks",p:"WR",t:"IND"},{n:"Demarcus Robinson",p:"WR",t:"SF"},{n:"Demond Claiborne",p:"RB",t:"MIN"},{n:"Denzel Boston",p:"WR",t:"CLE"},{n:"Derius Davis",p:"WR",t:"LAC"},{n:"Derrick Henry",p:"RB",t:"BAL"},{n:"Deshaun Watson",p:"QB",t:"CLE"},{n:"Devaughn Vele",p:"WR",t:"NO"},{n:"Devin Duvernay",p:"WR",t:"ARI"},{n:"Devin Singletary",p:"RB",t:"NYG"},{n:"Devontez Walker",p:"WR",t:"BAL"},{n:"Dohnte Meyers",p:"WR",t:"CIN"},{n:"Dolphins D/ST",p:"DEF",t:"MIA"},{n:"Dominic Zvada",p:"K",t:"NYG"},{n:"Dontayvion Wicks",p:"WR",t:"PHI"},{n:"Drake London",p:"WR",t:"ATL"},{n:"Drake Maye",p:"QB",t:"NE"},{n:"Drew Allar",p:"QB",t:"PIT"},{n:"Drew Lock",p:"QB",t:"SEA"},{n:"Drew Sample",p:"TE",t:"CIN"},{n:"Drew Stevens",p:"K",t:"WAS"},{n:"Durham Smythe",p:"TE",t:"BAL"},{n:"Dyami Brown",p:"WR",t:"WAS"},{n:"Dylan Laube",p:"RB",t:"LV"},{n:"Dylan Sampson",p:"RB",t:"CLE"},{n:"E.J. Jenkins",p:"TE",t:"PHI"},{n:"Eagles D/ST",p:"DEF",t:"PHI"},{n:"Eddy Pineiro",p:"K",t:"SF"},{n:"Efton Chism III",p:"WR",t:"NE"},{n:"Eli Heidenreich",p:"RB",t:"PIT"},{n:"Eli Raridon",p:"TE",t:"NE"},{n:"Eli Stowers",p:"TE",t:"PHI"},{n:"Elic Ayomanor",p:"WR",t:"TEN"},{n:"Elijah Arroyo",p:"TE",t:"SEA"},{n:"Elijah Higgins",p:"TE",t:"ARI"},{n:"Elijah Moore",p:"WR",t:"PHI"},{n:"Elijah Sarratt",p:"WR",t:"BAL"},{n:"Emanuel Wilson",p:"RB",t:"SEA"},{n:"Emari Demercado",p:"RB",t:"DAL"},{n:"Emeka Egbuka",p:"WR",t:"TB"},{n:"Emmett Johnson",p:"RB",t:"KC"},{n:"Eric Saubert",p:"TE",t:"SEA"},{n:"Erick All",p:"TE",t:"CIN"},{n:"Evan Engram",p:"TE",t:"DEN"},{n:"Evan McPherson",p:"K",t:"CIN"},{n:"Falcons D/ST",p:"DEF",t:"ATL"},{n:"Feleipe Franks",p:"TE",t:"CAR"},{n:"Fernando Mendoza",p:"QB",t:"LV"},{n:"Foster Moreau",p:"TE",t:"HOU"},{n:"Gardner Minshew",p:"QB",t:"ARI"},{n:"Garrett Nussmeier",p:"QB",t:"KC"},{n:"Garrett Wilson",p:"WR",t:"NYJ"},{n:"Gavin Bartholomew",p:"TE",t:"MIN"},{n:"Geno Smith",p:"QB",t:"NYJ"},{n:"George Holani",p:"RB",t:"SEA"},{n:"George Kittle",p:"TE",t:"SF"},{n:"George Pickens",p:"WR",t:"DAL"},{n:"Germie Bernard",p:"WR",t:"PIT"},{n:"Giants D/ST",p:"DEF",t:"NYG"},{n:"Greg Dulcich",p:"TE",t:"MIA"},{n:"Gunnar Helm",p:"TE",t:"TEN"},{n:"Harold Fannin Jr.",p:"TE",t:"CLE"},{n:"Harrison Butker",p:"K",t:"KC"},{n:"Harrison Mevis",p:"K",t:"LA"},{n:"Haynes King",p:"QB",t:"CAR"},{n:"Hunter Henry",p:"TE",t:"NE"},{n:"Hunter Long",p:"TE",t:"ARI"},{n:"Hunter Luepke",p:"RB",t:"DAL"},{n:"Ian Thomas",p:"TE",t:"LV"},{n:"Isaac TeSlaa",p:"WR",t:"DET"},{n:"Isaiah Bond",p:"WR",t:"CLE"},{n:"Isaiah Davis",p:"RB",t:"NYJ"},{n:"Isaiah Likely",p:"TE",t:"NYG"},{n:"Isaiah Williams",p:"WR",t:"NYJ"},{n:"J. Michael Sturdivant",p:"WR",t:"GB"},{n:"J.J. McCarthy",p:"QB",t:"MIN"},{n:"J.K. Dobbins",p:"RB",t:"DEN"},{n:"Ja'Kobi Lane",p:"WR",t:"BAL"},{n:"Ja'Marr Chase",p:"WR",t:"CIN"},{n:"Ja'Tavion Sanders",p:"TE",t:"CAR"},{n:"Jack Bech",p:"WR",t:"LV"},{n:"Jack Endries",p:"TE",t:"CIN"},{n:"Jack Strand",p:"QB",t:"ATL"},{n:"Jackson Hawes",p:"TE",t:"BUF"},{n:"Jackson Meeks",p:"TE",t:"DET"},{n:"Jacob Cowing",p:"WR",t:"SF"},{n:"Jacob Saylors",p:"RB",t:"DET"},{n:"Jacoby Brissett",p:"QB",t:"ARI"},{n:"Jacory Croskey-Merritt",p:"RB",t:"WAS"},{n:"Jadarian Price",p:"RB",t:"SEA"},{n:"Jaguars D/ST",p:"DEF",t:"JAX"},{n:"Jahan Dotson",p:"WR",t:"ATL"},{n:"Jahdae Walker",p:"WR",t:"CHI"},{n:"Jahmyr Gibbs",p:"RB",t:"DET"},{n:"Jake Bates",p:"K",t:"DET"},{n:"Jake Briningstool",p:"TE",t:"KC"},{n:"Jake Elliott",p:"K",t:"PHI"},{n:"Jake Ferguson",p:"TE",t:"DAL"},{n:"Jake Tonges",p:"TE",t:"SF"},{n:"Jakobi Meyers",p:"WR",t:"JAX"},{n:"Jalen Brooks",p:"WR",t:"ARI"},{n:"Jalen Coker",p:"WR",t:"CAR"},{n:"Jalen Hurts",p:"QB",t:"PHI"},{n:"Jalen McMillan",p:"WR",t:"TB"},{n:"Jalen Milroe",p:"QB",t:"SEA"},{n:"Jalen Nailor",p:"WR",t:"LV"},{n:"Jalen Royals",p:"WR",t:"KC"},{n:"Jalen Tolbert",p:"WR",t:"MIA"},{n:"Jalon Daniels",p:"QB",t:"TB"},{n:"Jameis Winston",p:"QB",t:"NYG"},{n:"James Cook",p:"RB",t:"BUF"},{n:"Jameson Williams",p:"WR",t:"DET"},{n:"Jared Goff",p:"QB",t:"DET"},{n:"Jared Wayne",p:"WR",t:"HOU"},{n:"Jared Wiley",p:"TE",t:"KC"},{n:"Jarrett Stidham",p:"QB",t:"DEN"},{n:"Jason Myers",p:"K",t:"SEA"},{n:"Jauan Jennings",p:"WR",t:"MIN"},{n:"Javonte Williams",p:"RB",t:"DAL"},{n:"Jaxon Smith-Njigba",p:"WR",t:"SEA"},{n:"Jaxson Dart",p:"QB",t:"NYG"},{n:"Jayden Daniels",p:"QB",t:"WAS"},{n:"Jayden Reed",p:"WR",t:"GB"},{n:"Jaylen Waddle",p:"WR",t:"DEN"},{n:"Jaylen Warren",p:"RB",t:"PIT"},{n:"Jaylen Wright",p:"RB",t:"MIA"},{n:"Jaylin Lane",p:"WR",t:"WAS"},{n:"Jaylin Noel",p:"WR",t:"HOU"},{n:"Jelani Woods",p:"TE",t:"NYJ"},{n:"Jeremiyah Love",p:"RB",t:"ARI"},{n:"Jeremy Ruckert",p:"TE",t:"NYJ"},{n:"Jerry Jeudy",p:"WR",t:"CLE"},{n:"Jets D/ST",p:"DEF",t:"NYJ"},{n:"Jimmy Horn Jr.",p:"WR",t:"CAR"},{n:"Joe Burrow",p:"QB",t:"CIN"},{n:"Joe Fagnano",p:"QB",t:"BAL"},{n:"Joe Flacco",p:"QB",t:"CIN"},{n:"Joey Slye",p:"K",t:"TEN"},{n:"John Bates",p:"TE",t:"WAS"},{n:"John Metchie III",p:"WR",t:"CAR"},{n:"Johnny Mundt",p:"TE",t:"PHI"},{n:"Jonah Coleman",p:"RB",t:"DEN"},{n:"Jonathan Mingo",p:"WR",t:"DAL"},{n:"Jonathan Taylor",p:"RB",t:"IND"},{n:"Jonathon Brooks",p:"RB",t:"CAR"},{n:"Jonnu Smith",p:"TE",t:"GB"},{n:"Jordan Addison",p:"WR",t:"MIN"},{n:"Jordan James",p:"RB",t:"SF"},{n:"Jordan Love",p:"QB",t:"GB"},{n:"Jordan Mason",p:"RB",t:"MIN"},{n:"Jordan Watkins",p:"WR",t:"SF"},{n:"Jordan Whittington",p:"WR",t:"LA"},{n:"Josh Allen",p:"QB",t:"BUF"},{n:"Josh Cameron",p:"WR",t:"JAX"},{n:"Josh Cuevas",p:"TE",t:"BAL"},{n:"Josh Downs",p:"WR",t:"IND"},{n:"Josh Oliver",p:"TE",t:"MIN"},{n:"Josh Palmer",p:"WR",t:"BUF"},{n:"Josh Whyle",p:"TE",t:"GB"},{n:"Joshua Dobbs",p:"QB",t:"DET"},{n:"Julius Chestnut",p:"RB",t:"TEN"},{n:"Justice Hill",p:"RB",t:"BAL"},{n:"Justin Fields",p:"QB",t:"KC"},{n:"Justin Herbert",p:"QB",t:"LAC"},{n:"Justin Jefferson",p:"WR",t:"MIN"},{n:"Justin Joly",p:"TE",t:"MIA"},{n:"Juwan Johnson",p:"TE",t:"NO"},{n:"KC Concepcion",p:"WR",t:"CLE"},{n:"Ka'imi Fairbairn",p:"K",t:"HOU"},{n:"KaVontae Turpin",p:"WR",t:"DAL"},{n:"Kaden Wetjen",p:"WR",t:"PIT"},{n:"Kaelon Black",p:"RB",t:"SF"},{n:"Kaleb Johnson",p:"RB",t:"GB"},{n:"Kalif Raymond",p:"WR",t:"CHI"},{n:"Kameron Johnson",p:"WR",t:"TB"},{n:"Kayshon Boutte",p:"WR",t:"HOU"},{n:"Kaytron Allen",p:"RB",t:"WAS"},{n:"Ke'Shawn Williams",p:"WR",t:"CIN"},{n:"KeAndre Lambert-Smith",p:"WR",t:"LAC"},{n:"Keaton Mitchell",p:"RB",t:"LAC"},{n:"Keenan Allen",p:"WR",t:"IND"},{n:"Keleki Latu",p:"TE",t:"BUF"},{n:"Kendre Miller",p:"RB",t:"NO"},{n:"Kendrick Bourne",p:"WR",t:"ARI"},{n:"Kene Nwangwu",p:"RB",t:"NYJ"},{n:"Kenneth Walker III",p:"RB",t:"KC"},{n:"Kenny Gainwell",p:"RB",t:"TB"},{n:"Kenny Pickett",p:"QB",t:"CAR"},{n:"Kenyon Sadiq",p:"TE",t:"NYJ"},{n:"Keon Coleman",p:"WR",t:"BUF"},{n:"Kevin Coleman Jr.",p:"WR",t:"MIA"},{n:"Khalil Shakir",p:"WR",t:"BUF"},{n:"Kimani Vidal",p:"RB",t:"LAC"},{n:"Kirk Cousins",p:"QB",t:"LV"},{n:"Ko Kieft",p:"TE",t:"TB"},{n:"Konata Mumpfield",p:"WR",t:"LA"},{n:"Kurtis Rourke",p:"QB",t:"SF"},{n:"Kyle Allen",p:"QB",t:"BUF"},{n:"Kyle Juszczyk",p:"RB",t:"SF"},{n:"Kyle McCord",p:"QB",t:"MIA"},{n:"Kyle Monangai",p:"RB",t:"CHI"},{n:"Kyle Pitts",p:"TE",t:"ATL"},{n:"Kyle Williams",p:"WR",t:"NE"},{n:"Kylen Granson",p:"TE",t:"TEN"},{n:"Kyler Murray",p:"QB",t:"MIN"},{n:"Kyren Williams",p:"RB",t:"LA"},{n:"LaJohntay Wester",p:"WR",t:"BAL"},{n:"Ladd McConkey",p:"WR",t:"LAC"},{n:"Lamar Jackson",p:"QB",t:"BAL"},{n:"Laquon Treadwell",p:"WR",t:"IND"},{n:"LeQuint Allen Jr.",p:"RB",t:"JAX"},{n:"Lil'Jordan Humphrey",p:"WR",t:"DEN"},{n:"Lions D/ST",p:"DEF",t:"DET"},{n:"Luke Farrell",p:"TE",t:"SF"},{n:"Luke McCaffrey",p:"WR",t:"WAS"},{n:"Luke Schoonmaker",p:"TE",t:"DAL"},{n:"Luther Burden III",p:"WR",t:"CHI"},{n:"Mac Jones",p:"QB",t:"SF"},{n:"Mack Hollins",p:"WR",t:"NE"},{n:"Makai Lemon",p:"WR",t:"PHI"},{n:"Malachi Corley",p:"WR",t:"CLE"},{n:"Malachi Fields",p:"WR",t:"NYG"},{n:"Malik Benson",p:"WR",t:"LV"},{n:"Malik Davis",p:"RB",t:"DAL"},{n:"Malik Nabers",p:"WR",t:"NYG"},{n:"Malik Washington",p:"WR",t:"MIA"},{n:"Malik Willis",p:"QB",t:"MIA"},{n:"MarShawn Lloyd",p:"RB",t:"GB"},{n:"Marcus Mariota",p:"QB",t:"WAS"},{n:"Mark Andrews",p:"TE",t:"BAL"},{n:"Mark Redman",p:"TE",t:"GB"},{n:"Marlin Klein",p:"TE",t:"HOU"},{n:"Marquise Brown",p:"WR",t:"PHI"},{n:"Marvin Harrison Jr.",p:"WR",t:"ARI"},{n:"Marvin Mims Jr.",p:"WR",t:"DEN"},{n:"Mason Rudolph",p:"QB",t:"PIT"},{n:"Mason Taylor",p:"TE",t:"NYJ"},{n:"Matt Gay",p:"K",t:"LV"},{n:"Matthew Golden",p:"WR",t:"GB"},{n:"Matthew Hibner",p:"TE",t:"BAL"},{n:"Matthew Stafford",p:"QB",t:"LA"},{n:"Max Bredeson",p:"RB",t:"MIN"},{n:"Max Klare",p:"TE",t:"LA"},{n:"Michael Burton",p:"RB",t:"CLE"},{n:"Michael Mayer",p:"TE",t:"LV"},{n:"Michael Penix Jr.",p:"QB",t:"ATL"},{n:"Michael Pittman",p:"WR",t:"PIT"},{n:"Michael Wilson",p:"WR",t:"ARI"},{n:"Mike Evans",p:"WR",t:"SF"},{n:"Mike Gesicki",p:"TE",t:"CIN"},{n:"Mike Washington Jr.",p:"RB",t:"LV"},{n:"Mitchell Evans",p:"TE",t:"CAR"},{n:"Mitchell Trubisky",p:"QB",t:"TEN"},{n:"Mo Alie-Cox",p:"TE",t:"IND"},{n:"Montorie Foster Jr",p:"WR",t:"SEA"},{n:"Myles Price",p:"WR",t:"MIN"},{n:"Najee Harris",p:"RB",t:"NYG"},{n:"Nate Adkins",p:"TE",t:"DEN"},{n:"Nate Boerkircher",p:"TE",t:"JAX"},{n:"Nicholas Singleton",p:"RB",t:"TEN"},{n:"Nick Folk",p:"K",t:"ATL"},{n:"Nick Kallerup",p:"TE",t:"SEA"},{n:"Nico Collins",p:"WR",t:"HOU"},{n:"Nikko Remigio",p:"WR",t:"KC"},{n:"Noah Fant",p:"TE",t:"NO"},{n:"Noah Gray",p:"TE",t:"KC"},{n:"Odell Beckham Jr.",p:"WR",t:"NYG"},{n:"Olamide Zaccheaus",p:"WR",t:"ATL"},{n:"Ollie Gordon II",p:"RB",t:"MIA"},{n:"Omar Cooper Jr.",p:"WR",t:"NYJ"},{n:"Omarion Hampton",p:"RB",t:"LAC"},{n:"Oronde Gadsden II",p:"TE",t:"LAC"},{n:"Oscar Delp",p:"TE",t:"NO"},{n:"Packers D/ST",p:"DEF",t:"GB"},{n:"Panthers D/ST",p:"DEF",t:"CAR"},{n:"Parker Washington",p:"WR",t:"JAX"},{n:"Pat Bryant",p:"WR",t:"DEN"},{n:"Pat Freiermuth",p:"TE",t:"PIT"},{n:"Patrick Mahomes",p:"QB",t:"KC"},{n:"Patrick Ricard",p:"RB",t:"NYG"},{n:"Patriots D/ST",p:"DEF",t:"NE"},{n:"Payne Durham",p:"TE",t:"TB"},{n:"Puka Nacua",p:"WR",t:"LA"},{n:"Quentin Johnston",p:"WR",t:"LAC"},{n:"Quinn Ewers",p:"QB",t:"JAX"},{n:"Quinshon Judkins",p:"RB",t:"CLE"},{n:"Quintin Morris",p:"TE",t:"JAX"},{n:"RJ Harvey",p:"RB",t:"DEN"},{n:"Rachaad White",p:"RB",t:"WAS"},{n:"Raheim Sanders",p:"RB",t:"CLE"},{n:"Raiders D/ST",p:"DEF",t:"LV"},{n:"Rams D/ST",p:"DEF",t:"LA"},{n:"Rashee Rice",p:"WR",t:"KC"},{n:"Rasheen Ali",p:"RB",t:"BAL"},{n:"Rashid Shaheed",p:"WR",t:"SEA"},{n:"Rashod Bateman",p:"WR",t:"BAL"},{n:"Ravens D/ST",p:"DEF",t:"BAL"},{n:"Ray Davis",p:"RB",t:"BUF"},{n:"Reggie Gilliam",p:"RB",t:"NE"},{n:"Reggie Virgil",p:"WR",t:"ARI"},{n:"Rhamondre Stevenson",p:"RB",t:"NE"},{n:"Rico Dowdle",p:"RB",t:"PIT"},{n:"Riley Leonard",p:"QB",t:"IND"},{n:"Riley Nowakowski",p:"TE",t:"PIT"},{n:"Riley Patterson",p:"K",t:"MIA"},{n:"Robert Tonyan",p:"TE",t:"PIT"},{n:"Roman Wilson",p:"WR",t:"PIT"},{n:"Rome Odunze",p:"WR",t:"CHI"},{n:"Romeo Doubs",p:"WR",t:"NE"},{n:"Ronnie Rivers",p:"RB",t:"LA"},{n:"Roschon Johnson",p:"RB",t:"CHI"},{n:"Ryan Fitzgerald",p:"K",t:"CAR"},{n:"Ryan Flournoy",p:"WR",t:"DAL"},{n:"Ryan Miller",p:"WR",t:"MIA"},{n:"Saints D/ST",p:"DEF",t:"NO"},{n:"Sam Darnold",p:"QB",t:"SEA"},{n:"Sam Ehlinger",p:"QB",t:"DEN"},{n:"Sam Howell",p:"QB",t:"DAL"},{n:"Sam LaPorta",p:"TE",t:"DET"},{n:"Sam Roush",p:"TE",t:"CHI"},{n:"Samaje Perine",p:"RB",t:"CIN"},{n:"Saquon Barkley",p:"RB",t:"PHI"},{n:"Seahawks D/ST",p:"DEF",t:"SEA"},{n:"Sean Tucker",p:"RB",t:"TB"},{n:"Seth McGowan",p:"RB",t:"IND"},{n:"Seydou Traore",p:"TE",t:"MIA"},{n:"Shedeur Sanders",p:"QB",t:"CLE"},{n:"Simi Fehoko",p:"WR",t:"ARI"},{n:"Sione Vaki",p:"RB",t:"DET"},{n:"Skyler Bell",p:"WR",t:"BUF"},{n:"Skyy Moore",p:"WR",t:"GB"},{n:"Spencer Rattler",p:"QB",t:"NO"},{n:"Spencer Shrader",p:"K",t:"IND"},{n:"Steelers D/ST",p:"DEF",t:"PIT"},{n:"Stefon Diggs",p:"WR",t:"WAS"},{n:"Stetson Bennett",p:"QB",t:"LA"},{n:"T.J. Hockenson",p:"TE",t:"MIN"},{n:"Tahj Brooks",p:"RB",t:"CIN"},{n:"Tai Felton",p:"WR",t:"MIN"},{n:"Tank Bigsby",p:"RB",t:"PHI"},{n:"Tanner Arkin",p:"TE",t:"NE"},{n:"Tanner Koziol",p:"TE",t:"JAX"},{n:"Tanner McKee",p:"QB",t:"PHI"},{n:"Tay Martin",p:"WR",t:"DET"},{n:"Taylen Green",p:"QB",t:"CLE"},{n:"Ted Hurst III",p:"WR",t:"TB"},{n:"Tee Higgins",p:"WR",t:"CIN"},{n:"Terrance Ferguson",p:"TE",t:"LA"},{n:"Terry McLaurin",p:"WR",t:"WAS"},{n:"Tetairoa McMillan",p:"WR",t:"CAR"},{n:"Texans D/ST",p:"DEF",t:"HOU"},{n:"Tez Johnson",p:"WR",t:"TB"},{n:"Theo Johnson",p:"TE",t:"NYG"},{n:"Thomas Fidone II",p:"TE",t:"NYG"},{n:"Tim Patrick",p:"WR",t:"NYJ"},{n:"Titans D/ST",p:"DEF",t:"TEN"},{n:"Tommy DeVito",p:"QB",t:"NE"},{n:"Tommy Tremble",p:"TE",t:"CAR"},{n:"Tony Pollard",p:"RB",t:"TEN"},{n:"Tory Horton",p:"WR",t:"SEA"},{n:"Travis Etienne",p:"RB",t:"NO"},{n:"Travis Hunter",p:"WR",t:"JAX"},{n:"Travis Kelce",p:"TE",t:"KC"},{n:"Tre Harris",p:"WR",t:"LAC"},{n:"Tre Tucker",p:"WR",t:"LV"},{n:"TreVeyon Henderson",p:"RB",t:"NE"},{n:"Trevor Lawrence",p:"QB",t:"JAX"},{n:"Trey Lance",p:"QB",t:"LAC"},{n:"Trey McBride",p:"TE",t:"ARI"},{n:"Trey Smack",p:"K",t:"GB"},{n:"Treylon Burks",p:"WR",t:"WAS"},{n:"Troy Franklin",p:"WR",t:"DEN"},{n:"Tua Tagovailoa",p:"QB",t:"ATL"},{n:"Tucker Kraft",p:"TE",t:"GB"},{n:"Tutu Atwell",p:"WR",t:"LA"},{n:"Ty Johnson",p:"RB",t:"BUF"},{n:"Ty Simpson",p:"QB",t:"LA"},{n:"Tyjae Spears",p:"RB",t:"TEN"},{n:"Tylan Wallace",p:"WR",t:"CLE"},{n:"Tyler Allgeier",p:"RB",t:"ARI"},{n:"Tyler Badie",p:"RB",t:"DEN"},{n:"Tyler Bass",p:"K",t:"BUF"},{n:"Tyler Conklin",p:"TE",t:"DET"},{n:"Tyler Higbee",p:"TE",t:"LA"},{n:"Tyler Huntley",p:"QB",t:"BAL"},{n:"Tyler Loop",p:"K",t:"BAL"},{n:"Tyler Shough",p:"QB",t:"NO"},{n:"Tyler Warren",p:"TE",t:"IND"},{n:"Tyquan Thornton",p:"WR",t:"KC"},{n:"Tyrod Taylor",p:"QB",t:"GB"},{n:"Tyrone Tracy Jr.",p:"RB",t:"NYG"},{n:"Tyson Bagent",p:"QB",t:"CHI"},{n:"Vikings D/ST",p:"DEF",t:"MIN"},{n:"Wan'Dale Robinson",p:"WR",t:"TEN"},{n:"Wil Lutz",p:"K",t:"DEN"},{n:"Will Howard",p:"QB",t:"PIT"},{n:"Will Kacmarek",p:"TE",t:"MIA"},{n:"Will Reichard",p:"K",t:"MIN"},{n:"Will Shipley",p:"RB",t:"PHI"},{n:"Woody Marks",p:"RB",t:"HOU"},{n:"Xavier Hutchinson",p:"WR",t:"HOU"},{n:"Xavier Legette",p:"WR",t:"CAR"},{n:"Xavier Smith",p:"WR",t:"LA"},{n:"Xavier Worthy",p:"WR",t:"KC"},{n:"Zach Wilson",p:"QB",t:"NO"},{n:"Zachariah Branch",p:"WR",t:"ATL"},{n:"Zavion Thomas",p:"WR",t:"CHI"},{n:"Zay Flowers",p:"WR",t:"BAL"}];
+
+var TEAM_ALIASES = {
+  'JAC': 'JAX', 'WSH': 'WAS', 'LAR': 'LA', 'ARZ': 'ARI', 'NEP': 'NE', 'GBP': 'GB',
+  'KCC': 'KC', 'NOS': 'NO', 'SFO': 'SF', 'TBB': 'TB', 'LVR': 'LV'
+};
+
+var SCHEDULE_ALL = [{w:1,a:"NE",h:"SEA",d:"Wed Sep 9, 8:20 PM ET",t:"2026-09-10T00:20:00Z"},{w:1,a:"SF",h:"LA",d:"Thu Sep 10, 8:35 PM ET",t:"2026-09-11T00:35:00Z"},{w:1,a:"CHI",h:"CAR",d:"Sun Sep 13, 1:00 PM ET",t:"2026-09-13T17:00:00Z"},{w:1,a:"TB",h:"CIN",d:"Sun Sep 13, 1:00 PM ET",t:"2026-09-13T17:00:00Z"},{w:1,a:"NO",h:"DET",d:"Sun Sep 13, 1:00 PM ET",t:"2026-09-13T17:00:00Z"},{w:1,a:"BUF",h:"HOU",d:"Sun Sep 13, 1:00 PM ET",t:"2026-09-13T17:00:00Z"},{w:1,a:"BAL",h:"IND",d:"Sun Sep 13, 1:00 PM ET",t:"2026-09-13T17:00:00Z"},{w:1,a:"CLE",h:"JAX",d:"Sun Sep 13, 1:00 PM ET",t:"2026-09-13T17:00:00Z"},{w:1,a:"ATL",h:"PIT",d:"Sun Sep 13, 1:00 PM ET",t:"2026-09-13T17:00:00Z"},{w:1,a:"NYJ",h:"TEN",d:"Sun Sep 13, 1:00 PM ET",t:"2026-09-13T17:00:00Z"},{w:1,a:"ARI",h:"LAC",d:"Sun Sep 13, 4:25 PM ET",t:"2026-09-13T20:25:00Z"},{w:1,a:"MIA",h:"LV",d:"Sun Sep 13, 4:25 PM ET",t:"2026-09-13T20:25:00Z"},{w:1,a:"GB",h:"MIN",d:"Sun Sep 13, 4:25 PM ET",t:"2026-09-13T20:25:00Z"},{w:1,a:"WAS",h:"PHI",d:"Sun Sep 13, 4:25 PM ET",t:"2026-09-13T20:25:00Z"},{w:1,a:"DAL",h:"NYG",d:"Sun Sep 13, 8:20 PM ET",t:"2026-09-14T00:20:00Z"},{w:1,a:"DEN",h:"KC",d:"Mon Sep 14, 8:15 PM ET",t:"2026-09-15T00:15:00Z"},{w:2,a:"DET",h:"BUF",d:"Thu Sep 17, 8:15 PM ET",t:"2026-09-18T00:15:00Z"},{w:2,a:"CAR",h:"ATL",d:"Sun Sep 20, 1:00 PM ET",t:"2026-09-20T17:00:00Z"},{w:2,a:"NO",h:"BAL",d:"Sun Sep 20, 1:00 PM ET",t:"2026-09-20T17:00:00Z"},{w:2,a:"MIN",h:"CHI",d:"Sun Sep 20, 1:00 PM ET",t:"2026-09-20T17:00:00Z"},{w:2,a:"CIN",h:"HOU",d:"Sun Sep 20, 1:00 PM ET",t:"2026-09-20T17:00:00Z"},{w:2,a:"PIT",h:"NE",d:"Sun Sep 20, 1:00 PM ET",t:"2026-09-20T17:00:00Z"},{w:2,a:"GB",h:"NYJ",d:"Sun Sep 20, 1:00 PM ET",t:"2026-09-20T17:00:00Z"},{w:2,a:"CLE",h:"TB",d:"Sun Sep 20, 1:00 PM ET",t:"2026-09-20T17:00:00Z"},{w:2,a:"PHI",h:"TEN",d:"Sun Sep 20, 1:00 PM ET",t:"2026-09-20T17:00:00Z"},{w:2,a:"JAX",h:"DEN",d:"Sun Sep 20, 4:05 PM ET",t:"2026-09-20T20:05:00Z"},{w:2,a:"LV",h:"LAC",d:"Sun Sep 20, 4:05 PM ET",t:"2026-09-20T20:05:00Z"},{w:2,a:"SEA",h:"ARI",d:"Sun Sep 20, 4:25 PM ET",t:"2026-09-20T20:25:00Z"},{w:2,a:"WAS",h:"DAL",d:"Sun Sep 20, 4:25 PM ET",t:"2026-09-20T20:25:00Z"},{w:2,a:"MIA",h:"SF",d:"Sun Sep 20, 4:25 PM ET",t:"2026-09-20T20:25:00Z"},{w:2,a:"IND",h:"KC",d:"Sun Sep 20, 8:20 PM ET",t:"2026-09-21T00:20:00Z"},{w:2,a:"NYG",h:"LA",d:"Mon Sep 21, 8:15 PM ET",t:"2026-09-22T00:15:00Z"},{w:3,a:"ATL",h:"GB",d:"Thu Sep 24, 8:15 PM ET",t:"2026-09-25T00:15:00Z"},{w:3,a:"LAC",h:"BUF",d:"Sun Sep 27, 1:00 PM ET",t:"2026-09-27T17:00:00Z"},{w:3,a:"CAR",h:"CLE",d:"Sun Sep 27, 1:00 PM ET",t:"2026-09-27T17:00:00Z"},{w:3,a:"NYJ",h:"DET",d:"Sun Sep 27, 1:00 PM ET",t:"2026-09-27T17:00:00Z"},{w:3,a:"HOU",h:"IND",d:"Sun Sep 27, 1:00 PM ET",t:"2026-09-27T17:00:00Z"},{w:3,a:"NE",h:"JAX",d:"Sun Sep 27, 1:00 PM ET",t:"2026-09-27T17:00:00Z"},{w:3,a:"KC",h:"MIA",d:"Sun Sep 27, 1:00 PM ET",t:"2026-09-27T17:00:00Z"},{w:3,a:"TEN",h:"NYG",d:"Sun Sep 27, 1:00 PM ET",t:"2026-09-27T17:00:00Z"},{w:3,a:"CIN",h:"PIT",d:"Sun Sep 27, 1:00 PM ET",t:"2026-09-27T17:00:00Z"},{w:3,a:"SEA",h:"WAS",d:"Sun Sep 27, 1:00 PM ET",t:"2026-09-27T17:00:00Z"},{w:3,a:"ARI",h:"SF",d:"Sun Sep 27, 4:05 PM ET",t:"2026-09-27T20:05:00Z"},{w:3,a:"MIN",h:"TB",d:"Sun Sep 27, 4:05 PM ET",t:"2026-09-27T20:05:00Z"},{w:3,a:"BAL",h:"DAL",d:"Sun Sep 27, 4:25 PM ET",t:"2026-09-27T20:25:00Z"},{w:3,a:"LV",h:"NO",d:"Sun Sep 27, 4:25 PM ET",t:"2026-09-27T20:25:00Z"},{w:3,a:"LA",h:"DEN",d:"Sun Sep 27, 8:20 PM ET",t:"2026-09-28T00:20:00Z"},{w:3,a:"PHI",h:"CHI",d:"Mon Sep 28, 8:15 PM ET",t:"2026-09-29T00:15:00Z"},{w:4,a:"PIT",h:"CLE",d:"Thu Oct 1, 8:15 PM ET",t:"2026-10-02T00:15:00Z"},{w:4,a:"IND",h:"WAS",d:"Sun Oct 4, 9:30 AM ET",t:"2026-10-04T13:30:00Z"},{w:4,a:"TEN",h:"BAL",d:"Sun Oct 4, 1:00 PM ET",t:"2026-10-04T17:00:00Z"},{w:4,a:"NE",h:"BUF",d:"Sun Oct 4, 1:00 PM ET",t:"2026-10-04T17:00:00Z"},{w:4,a:"NYJ",h:"CHI",d:"Sun Oct 4, 1:00 PM ET",t:"2026-10-04T17:00:00Z"},{w:4,a:"JAX",h:"CIN",d:"Sun Oct 4, 1:00 PM ET",t:"2026-10-04T17:00:00Z"},{w:4,a:"DAL",h:"HOU",d:"Sun Oct 4, 1:00 PM ET",t:"2026-10-04T17:00:00Z"},{w:4,a:"ARI",h:"NYG",d:"Sun Oct 4, 1:00 PM ET",t:"2026-10-04T17:00:00Z"},{w:4,a:"LA",h:"PHI",d:"Sun Oct 4, 1:00 PM ET",t:"2026-10-04T17:00:00Z"},{w:4,a:"GB",h:"TB",d:"Sun Oct 4, 1:00 PM ET",t:"2026-10-04T17:00:00Z"},{w:4,a:"MIA",h:"MIN",d:"Sun Oct 4, 4:05 PM ET",t:"2026-10-04T20:05:00Z"},{w:4,a:"KC",h:"LV",d:"Sun Oct 4, 4:25 PM ET",t:"2026-10-04T20:25:00Z"},{w:4,a:"LAC",h:"SEA",d:"Sun Oct 4, 4:25 PM ET",t:"2026-10-04T20:25:00Z"},{w:4,a:"DEN",h:"SF",d:"Sun Oct 4, 4:25 PM ET",t:"2026-10-04T20:25:00Z"},{w:4,a:"DET",h:"CAR",d:"Sun Oct 4, 8:20 PM ET",t:"2026-10-05T00:20:00Z"},{w:4,a:"ATL",h:"NO",d:"Mon Oct 5, 8:15 PM ET",t:"2026-10-06T00:15:00Z"},{w:5,a:"TB",h:"DAL",d:"Thu Oct 8, 8:15 PM ET",t:"2026-10-09T00:15:00Z"},{w:5,a:"PHI",h:"JAX",d:"Sun Oct 11, 9:30 AM ET",t:"2026-10-11T13:30:00Z"},{w:5,a:"CIN",h:"MIA",d:"Sun Oct 11, 1:00 PM ET",t:"2026-10-11T17:00:00Z"},{w:5,a:"LV",h:"NE",d:"Sun Oct 11, 1:00 PM ET",t:"2026-10-11T17:00:00Z"},{w:5,a:"MIN",h:"NO",d:"Sun Oct 11, 1:00 PM ET",t:"2026-10-11T17:00:00Z"},{w:5,a:"CLE",h:"NYJ",d:"Sun Oct 11, 1:00 PM ET",t:"2026-10-11T17:00:00Z"},{w:5,a:"IND",h:"PIT",d:"Sun Oct 11, 1:00 PM ET",t:"2026-10-11T17:00:00Z"},{w:5,a:"HOU",h:"TEN",d:"Sun Oct 11, 1:00 PM ET",t:"2026-10-11T17:00:00Z"},{w:5,a:"NYG",h:"WAS",d:"Sun Oct 11, 1:00 PM ET",t:"2026-10-11T17:00:00Z"},{w:5,a:"DEN",h:"LAC",d:"Sun Oct 11, 4:05 PM ET",t:"2026-10-11T20:05:00Z"},{w:5,a:"DET",h:"ARI",d:"Sun Oct 11, 4:25 PM ET",t:"2026-10-11T20:25:00Z"},{w:5,a:"CHI",h:"GB",d:"Sun Oct 11, 4:25 PM ET",t:"2026-10-11T20:25:00Z"},{w:5,a:"SF",h:"SEA",d:"Sun Oct 11, 4:25 PM ET",t:"2026-10-11T20:25:00Z"},{w:5,a:"BAL",h:"ATL",d:"Sun Oct 11, 8:20 PM ET",t:"2026-10-12T00:20:00Z"},{w:5,a:"BUF",h:"LA",d:"Mon Oct 12, 8:15 PM ET",t:"2026-10-13T00:15:00Z"},{w:6,a:"SEA",h:"DEN",d:"Thu Oct 15, 8:15 PM ET",t:"2026-10-16T00:15:00Z"},{w:6,a:"HOU",h:"JAX",d:"Sun Oct 18, 9:30 AM ET",t:"2026-10-18T13:30:00Z"},{w:6,a:"CHI",h:"ATL",d:"Sun Oct 18, 1:00 PM ET",t:"2026-10-18T17:00:00Z"},{w:6,a:"BAL",h:"CLE",d:"Sun Oct 18, 1:00 PM ET",t:"2026-10-18T17:00:00Z"},{w:6,a:"TEN",h:"IND",d:"Sun Oct 18, 1:00 PM ET",t:"2026-10-18T17:00:00Z"},{w:6,a:"NYJ",h:"NE",d:"Sun Oct 18, 1:00 PM ET",t:"2026-10-18T17:00:00Z"},{w:6,a:"NO",h:"NYG",d:"Sun Oct 18, 1:00 PM ET",t:"2026-10-18T17:00:00Z"},{w:6,a:"CAR",h:"PHI",d:"Sun Oct 18, 1:00 PM ET",t:"2026-10-18T17:00:00Z"},{w:6,a:"PIT",h:"TB",d:"Sun Oct 18, 1:00 PM ET",t:"2026-10-18T17:00:00Z"},{w:6,a:"ARI",h:"LA",d:"Sun Oct 18, 4:05 PM ET",t:"2026-10-18T20:05:00Z"},{w:6,a:"LAC",h:"KC",d:"Sun Oct 18, 4:25 PM ET",t:"2026-10-18T20:25:00Z"},{w:6,a:"BUF",h:"LV",d:"Sun Oct 18, 4:25 PM ET",t:"2026-10-18T20:25:00Z"},{w:6,a:"DAL",h:"GB",d:"Sun Oct 18, 8:20 PM ET",t:"2026-10-19T00:20:00Z"},{w:6,a:"WAS",h:"SF",d:"Mon Oct 19, 8:15 PM ET",t:"2026-10-20T00:15:00Z"},{w:7,a:"NE",h:"CHI",d:"Thu Oct 22, 8:15 PM ET",t:"2026-10-23T00:15:00Z"},{w:7,a:"PIT",h:"NO",d:"Sun Oct 25, 9:30 AM ET",t:"2026-10-25T13:30:00Z"},{w:7,a:"SF",h:"ATL",d:"Sun Oct 25, 1:00 PM ET",t:"2026-10-25T17:00:00Z"},{w:7,a:"CIN",h:"BAL",d:"Sun Oct 25, 1:00 PM ET",t:"2026-10-25T17:00:00Z"},{w:7,a:"TB",h:"CAR",d:"Sun Oct 25, 1:00 PM ET",t:"2026-10-25T17:00:00Z"},{w:7,a:"NYG",h:"HOU",d:"Sun Oct 25, 1:00 PM ET",t:"2026-10-25T17:00:00Z"},{w:7,a:"IND",h:"MIN",d:"Sun Oct 25, 1:00 PM ET",t:"2026-10-25T17:00:00Z"},{w:7,a:"MIA",h:"NYJ",d:"Sun Oct 25, 1:00 PM ET",t:"2026-10-25T17:00:00Z"},{w:7,a:"CLE",h:"TEN",d:"Sun Oct 25, 1:00 PM ET",t:"2026-10-25T17:00:00Z"},{w:7,a:"DEN",h:"ARI",d:"Sun Oct 25, 4:05 PM ET",t:"2026-10-25T20:05:00Z"},{w:7,a:"GB",h:"DET",d:"Sun Oct 25, 4:25 PM ET",t:"2026-10-25T20:25:00Z"},{w:7,a:"LA",h:"LV",d:"Sun Oct 25, 4:25 PM ET",t:"2026-10-25T20:25:00Z"},{w:7,a:"KC",h:"SEA",d:"Sun Oct 25, 8:20 PM ET",t:"2026-10-26T00:20:00Z"},{w:7,a:"DAL",h:"PHI",d:"Mon Oct 26, 8:15 PM ET",t:"2026-10-27T00:15:00Z"},{w:8,a:"CAR",h:"GB",d:"Thu Oct 29, 8:15 PM ET",t:"2026-10-30T00:15:00Z"},{w:8,a:"BAL",h:"BUF",d:"Sun Nov 1, 1:00 PM ET",t:"2026-11-01T18:00:00Z"},{w:8,a:"TEN",h:"CIN",d:"Sun Nov 1, 1:00 PM ET",t:"2026-11-01T18:00:00Z"},{w:8,a:"ARI",h:"DAL",d:"Sun Nov 1, 1:00 PM ET",t:"2026-11-01T18:00:00Z"},{w:8,a:"MIN",h:"DET",d:"Sun Nov 1, 1:00 PM ET",t:"2026-11-01T18:00:00Z"},{w:8,a:"IND",h:"JAX",d:"Sun Nov 1, 1:00 PM ET",t:"2026-11-01T18:00:00Z"},{w:8,a:"LV",h:"NYJ",d:"Sun Nov 1, 1:00 PM ET",t:"2026-11-01T18:00:00Z"},{w:8,a:"CLE",h:"PIT",d:"Sun Nov 1, 1:00 PM ET",t:"2026-11-01T18:00:00Z"},{w:8,a:"ATL",h:"TB",d:"Sun Nov 1, 1:00 PM ET",t:"2026-11-01T18:00:00Z"},{w:8,a:"LAC",h:"LA",d:"Sun Nov 1, 4:05 PM ET",t:"2026-11-01T21:05:00Z"},{w:8,a:"KC",h:"DEN",d:"Sun Nov 1, 4:25 PM ET",t:"2026-11-01T21:25:00Z"},{w:8,a:"NE",h:"MIA",d:"Sun Nov 1, 4:25 PM ET",t:"2026-11-01T21:25:00Z"},{w:8,a:"PHI",h:"WAS",d:"Sun Nov 1, 8:20 PM ET",t:"2026-11-02T01:20:00Z"},{w:8,a:"CHI",h:"SEA",d:"Mon Nov 2, 8:15 PM ET",t:"2026-11-03T01:15:00Z"},{w:9,a:"JAX",h:"BAL",d:"Thu Nov 5, 8:15 PM ET",t:"2026-11-06T01:15:00Z"},{w:9,a:"CIN",h:"ATL",d:"Sun Nov 8, 9:30 AM ET",t:"2026-11-08T14:30:00Z"},{w:9,a:"DEN",h:"CAR",d:"Sun Nov 8, 1:00 PM ET",t:"2026-11-08T18:00:00Z"},{w:9,a:"DAL",h:"IND",d:"Sun Nov 8, 1:00 PM ET",t:"2026-11-08T18:00:00Z"},{w:9,a:"NYJ",h:"KC",d:"Sun Nov 8, 1:00 PM ET",t:"2026-11-08T18:00:00Z"},{w:9,a:"DET",h:"MIA",d:"Sun Nov 8, 1:00 PM ET",t:"2026-11-08T18:00:00Z"},{w:9,a:"CLE",h:"NO",d:"Sun Nov 8, 1:00 PM ET",t:"2026-11-08T18:00:00Z"},{w:9,a:"NYG",h:"PHI",d:"Sun Nov 8, 1:00 PM ET",t:"2026-11-08T18:00:00Z"},{w:9,a:"LA",h:"WAS",d:"Sun Nov 8, 1:00 PM ET",t:"2026-11-08T18:00:00Z"},{w:9,a:"HOU",h:"LAC",d:"Sun Nov 8, 4:05 PM ET",t:"2026-11-08T21:05:00Z"},{w:9,a:"LV",h:"SF",d:"Sun Nov 8, 4:05 PM ET",t:"2026-11-08T21:05:00Z"},{w:9,a:"GB",h:"NE",d:"Sun Nov 8, 4:25 PM ET",t:"2026-11-08T21:25:00Z"},{w:9,a:"ARI",h:"SEA",d:"Sun Nov 8, 4:25 PM ET",t:"2026-11-08T21:25:00Z"},{w:9,a:"TB",h:"CHI",d:"Sun Nov 8, 8:20 PM ET",t:"2026-11-09T01:20:00Z"},{w:9,a:"BUF",h:"MIN",d:"Mon Nov 9, 8:15 PM ET",t:"2026-11-10T01:15:00Z"},{w:10,a:"WAS",h:"NYG",d:"Thu Nov 12, 8:15 PM ET",t:"2026-11-13T01:15:00Z"},{w:10,a:"NE",h:"DET",d:"Sun Nov 15, 9:30 AM ET",t:"2026-11-15T14:30:00Z"},{w:10,a:"KC",h:"ATL",d:"Sun Nov 15, 1:00 PM ET",t:"2026-11-15T18:00:00Z"},{w:10,a:"HOU",h:"CLE",d:"Sun Nov 15, 1:00 PM ET",t:"2026-11-15T18:00:00Z"},{w:10,a:"MIN",h:"GB",d:"Sun Nov 15, 1:00 PM ET",t:"2026-11-15T18:00:00Z"},{w:10,a:"MIA",h:"IND",d:"Sun Nov 15, 1:00 PM ET",t:"2026-11-15T18:00:00Z"},{w:10,a:"CAR",h:"NO",d:"Sun Nov 15, 1:00 PM ET",t:"2026-11-15T18:00:00Z"},{w:10,a:"BUF",h:"NYJ",d:"Sun Nov 15, 1:00 PM ET",t:"2026-11-15T18:00:00Z"},{w:10,a:"JAX",h:"TEN",d:"Sun Nov 15, 1:00 PM ET",t:"2026-11-15T18:00:00Z"},{w:10,a:"LA",h:"ARI",d:"Sun Nov 15, 4:05 PM ET",t:"2026-11-15T21:05:00Z"},{w:10,a:"SEA",h:"LV",d:"Sun Nov 15, 4:05 PM ET",t:"2026-11-15T21:05:00Z"},{w:10,a:"SF",h:"DAL",d:"Sun Nov 15, 4:25 PM ET",t:"2026-11-15T21:25:00Z"},{w:10,a:"PIT",h:"CIN",d:"Sun Nov 15, 8:20 PM ET",t:"2026-11-16T01:20:00Z"},{w:10,a:"LAC",h:"BAL",d:"Mon Nov 16, 8:15 PM ET",t:"2026-11-17T01:15:00Z"},{w:11,a:"IND",h:"HOU",d:"Thu Nov 19, 8:15 PM ET",t:"2026-11-20T01:15:00Z"},{w:11,a:"MIA",h:"BUF",d:"Sun Nov 22, 1:00 PM ET",t:"2026-11-22T18:00:00Z"},{w:11,a:"BAL",h:"CAR",d:"Sun Nov 22, 1:00 PM ET",t:"2026-11-22T18:00:00Z"},{w:11,a:"NO",h:"CHI",d:"Sun Nov 22, 1:00 PM ET",t:"2026-11-22T18:00:00Z"},{w:11,a:"TEN",h:"DAL",d:"Sun Nov 22, 1:00 PM ET",t:"2026-11-22T18:00:00Z"},{w:11,a:"TB",h:"DET",d:"Sun Nov 22, 1:00 PM ET",t:"2026-11-22T18:00:00Z"},{w:11,a:"ARI",h:"KC",d:"Sun Nov 22, 1:00 PM ET",t:"2026-11-22T18:00:00Z"},{w:11,a:"JAX",h:"NYG",d:"Sun Nov 22, 1:00 PM ET",t:"2026-11-22T18:00:00Z"},{w:11,a:"NYJ",h:"LAC",d:"Sun Nov 22, 4:05 PM ET",t:"2026-11-22T21:05:00Z"},{w:11,a:"LV",h:"DEN",d:"Sun Nov 22, 4:25 PM ET",t:"2026-11-22T21:25:00Z"},{w:11,a:"PIT",h:"PHI",d:"Sun Nov 22, 4:25 PM ET",t:"2026-11-22T21:25:00Z"},{w:11,a:"MIN",h:"SF",d:"Sun Nov 22, 8:20 PM ET",t:"2026-11-23T01:20:00Z"},{w:11,a:"CIN",h:"WAS",d:"Mon Nov 23, 8:15 PM ET",t:"2026-11-24T01:15:00Z"},{w:12,a:"GB",h:"LA",d:"Wed Nov 25, 8:00 PM ET",t:"2026-11-26T01:00:00Z"},{w:12,a:"CHI",h:"DET",d:"Thu Nov 26, 1:00 PM ET",t:"2026-11-26T18:00:00Z"},{w:12,a:"PHI",h:"DAL",d:"Thu Nov 26, 4:30 PM ET",t:"2026-11-26T21:30:00Z"},{w:12,a:"KC",h:"BUF",d:"Thu Nov 26, 8:20 PM ET",t:"2026-11-27T01:20:00Z"},{w:12,a:"DEN",h:"PIT",d:"Fri Nov 27, 3:00 PM ET",t:"2026-11-27T20:00:00Z"},{w:12,a:"NO",h:"CIN",d:"Sun Nov 29, 1:00 PM ET",t:"2026-11-29T18:00:00Z"},{w:12,a:"LV",h:"CLE",d:"Sun Nov 29, 1:00 PM ET",t:"2026-11-29T18:00:00Z"},{w:12,a:"BAL",h:"HOU",d:"Sun Nov 29, 1:00 PM ET",t:"2026-11-29T18:00:00Z"},{w:12,a:"NYG",h:"IND",d:"Sun Nov 29, 1:00 PM ET",t:"2026-11-29T18:00:00Z"},{w:12,a:"NYJ",h:"MIA",d:"Sun Nov 29, 1:00 PM ET",t:"2026-11-29T18:00:00Z"},{w:12,a:"ATL",h:"MIN",d:"Sun Nov 29, 1:00 PM ET",t:"2026-11-29T18:00:00Z"},{w:12,a:"TEN",h:"JAX",d:"Sun Nov 29, 4:05 PM ET",t:"2026-11-29T21:05:00Z"},{w:12,a:"WAS",h:"ARI",d:"Sun Nov 29, 4:25 PM ET",t:"2026-11-29T21:25:00Z"},{w:12,a:"SEA",h:"SF",d:"Sun Nov 29, 4:25 PM ET",t:"2026-11-29T21:25:00Z"},{w:12,a:"NE",h:"LAC",d:"Sun Nov 29, 8:20 PM ET",t:"2026-11-30T01:20:00Z"},{w:12,a:"CAR",h:"TB",d:"Mon Nov 30, 8:15 PM ET",t:"2026-12-01T01:15:00Z"},{w:13,a:"KC",h:"LA",d:"Thu Dec 3, 8:15 PM ET",t:"2026-12-04T01:15:00Z"},{w:13,a:"DET",h:"ATL",d:"Sun Dec 6, 1:00 PM ET",t:"2026-12-06T18:00:00Z"},{w:13,a:"JAX",h:"CHI",d:"Sun Dec 6, 1:00 PM ET",t:"2026-12-06T18:00:00Z"},{w:13,a:"CIN",h:"CLE",d:"Sun Dec 6, 1:00 PM ET",t:"2026-12-06T18:00:00Z"},{w:13,a:"GB",h:"NO",d:"Sun Dec 6, 1:00 PM ET",t:"2026-12-06T18:00:00Z"},{w:13,a:"SF",h:"NYG",d:"Sun Dec 6, 1:00 PM ET",t:"2026-12-06T18:00:00Z"},{w:13,a:"LAC",h:"TB",d:"Sun Dec 6, 1:00 PM ET",t:"2026-12-06T18:00:00Z"},{w:13,a:"WAS",h:"TEN",d:"Sun Dec 6, 1:00 PM ET",t:"2026-12-06T18:00:00Z"},{w:13,a:"PHI",h:"ARI",d:"Sun Dec 6, 4:05 PM ET",t:"2026-12-06T21:05:00Z"},{w:13,a:"MIA",h:"DEN",d:"Sun Dec 6, 4:05 PM ET",t:"2026-12-06T21:05:00Z"},{w:13,a:"CAR",h:"MIN",d:"Sun Dec 6, 4:25 PM ET",t:"2026-12-06T21:25:00Z"},{w:13,a:"BUF",h:"NE",d:"Sun Dec 6, 4:25 PM ET",t:"2026-12-06T21:25:00Z"},{w:13,a:"HOU",h:"PIT",d:"Sun Dec 6, 8:20 PM ET",t:"2026-12-07T01:20:00Z"},{w:13,a:"DAL",h:"SEA",d:"Mon Dec 7, 8:15 PM ET",t:"2026-12-08T01:15:00Z"},{w:14,a:"MIN",h:"NE",d:"Thu Dec 10, 8:15 PM ET",t:"2026-12-11T01:15:00Z"},{w:14,a:"TB",h:"BAL",d:"Sun Dec 13, 1:00 PM ET",t:"2026-12-13T18:00:00Z"},{w:14,a:"NO",h:"CAR",d:"Sun Dec 13, 1:00 PM ET",t:"2026-12-13T18:00:00Z"},{w:14,a:"ATL",h:"CLE",d:"Sun Dec 13, 1:00 PM ET",t:"2026-12-13T18:00:00Z"},{w:14,a:"TEN",h:"DET",d:"Sun Dec 13, 1:00 PM ET",t:"2026-12-13T18:00:00Z"},{w:14,a:"CHI",h:"MIA",d:"Sun Dec 13, 1:00 PM ET",t:"2026-12-13T18:00:00Z"},{w:14,a:"DEN",h:"NYJ",d:"Sun Dec 13, 1:00 PM ET",t:"2026-12-13T18:00:00Z"},{w:14,a:"IND",h:"PHI",d:"Sun Dec 13, 1:00 PM ET",t:"2026-12-13T18:00:00Z"},{w:14,a:"HOU",h:"WAS",d:"Sun Dec 13, 1:00 PM ET",t:"2026-12-13T18:00:00Z"},{w:14,a:"LAC",h:"LV",d:"Sun Dec 13, 4:05 PM ET",t:"2026-12-13T21:05:00Z"},{w:14,a:"KC",h:"CIN",d:"Sun Dec 13, 4:25 PM ET",t:"2026-12-13T21:25:00Z"},{w:14,a:"NYG",h:"SEA",d:"Sun Dec 13, 4:25 PM ET",t:"2026-12-13T21:25:00Z"},{w:14,a:"LA",h:"SF",d:"Sun Dec 13, 4:25 PM ET",t:"2026-12-13T21:25:00Z"},{w:14,a:"BUF",h:"GB",d:"Sun Dec 13, 8:20 PM ET",t:"2026-12-14T01:20:00Z"},{w:14,a:"PIT",h:"JAX",d:"Mon Dec 14, 8:15 PM ET",t:"2026-12-15T01:15:00Z"},{w:15,a:"SF",h:"LAC",d:"Thu Dec 17, 8:15 PM ET",t:"2026-12-18T01:15:00Z"},{w:15,a:"SEA",h:"PHI",d:"Sat Dec 19, 5:00 PM ET",t:"2026-12-19T22:00:00Z"},{w:15,a:"CHI",h:"BUF",d:"Sat Dec 19, 8:20 PM ET",t:"2026-12-20T01:20:00Z"},{w:15,a:"CIN",h:"CAR",d:"Sun Dec 20, 1:00 PM ET",t:"2026-12-20T18:00:00Z"},{w:15,a:"MIA",h:"GB",d:"Sun Dec 20, 1:00 PM ET",t:"2026-12-20T18:00:00Z"},{w:15,a:"JAX",h:"HOU",d:"Sun Dec 20, 1:00 PM ET",t:"2026-12-20T18:00:00Z"},{w:15,a:"CLE",h:"NYG",d:"Sun Dec 20, 1:00 PM ET",t:"2026-12-20T18:00:00Z"},{w:15,a:"BAL",h:"PIT",d:"Sun Dec 20, 1:00 PM ET",t:"2026-12-20T18:00:00Z"},{w:15,a:"NO",h:"TB",d:"Sun Dec 20, 1:00 PM ET",t:"2026-12-20T18:00:00Z"},{w:15,a:"IND",h:"TEN",d:"Sun Dec 20, 1:00 PM ET",t:"2026-12-20T18:00:00Z"},{w:15,a:"ATL",h:"WAS",d:"Sun Dec 20, 1:00 PM ET",t:"2026-12-20T18:00:00Z"},{w:15,a:"NYJ",h:"ARI",d:"Sun Dec 20, 4:05 PM ET",t:"2026-12-20T21:05:00Z"},{w:15,a:"DAL",h:"LA",d:"Sun Dec 20, 4:25 PM ET",t:"2026-12-20T21:25:00Z"},{w:15,a:"DEN",h:"LV",d:"Sun Dec 20, 4:25 PM ET",t:"2026-12-20T21:25:00Z"},{w:15,a:"DET",h:"MIN",d:"Sun Dec 20, 8:20 PM ET",t:"2026-12-21T01:20:00Z"},{w:15,a:"NE",h:"KC",d:"Mon Dec 21, 8:15 PM ET",t:"2026-12-22T01:15:00Z"},{w:16,a:"HOU",h:"PHI",d:"Thu Dec 24, 8:15 PM ET",t:"2026-12-25T01:15:00Z"},{w:16,a:"GB",h:"CHI",d:"Fri Dec 25, 1:00 PM ET",t:"2026-12-25T18:00:00Z"},{w:16,a:"BUF",h:"DEN",d:"Fri Dec 25, 4:30 PM ET",t:"2026-12-25T21:30:00Z"},{w:16,a:"LA",h:"SEA",d:"Fri Dec 25, 8:15 PM ET",t:"2026-12-26T01:15:00Z"},{w:16,a:"TB",h:"ATL",d:"Sun Dec 27, 1:00 PM ET",t:"2026-12-27T18:00:00Z"},{w:16,a:"CLE",h:"BAL",d:"Sun Dec 27, 1:00 PM ET",t:"2026-12-27T18:00:00Z"},{w:16,a:"CIN",h:"IND",d:"Sun Dec 27, 1:00 PM ET",t:"2026-12-27T18:00:00Z"},{w:16,a:"LAC",h:"MIA",d:"Sun Dec 27, 1:00 PM ET",t:"2026-12-27T18:00:00Z"},{w:16,a:"WAS",h:"MIN",d:"Sun Dec 27, 1:00 PM ET",t:"2026-12-27T18:00:00Z"},{w:16,a:"ARI",h:"NO",d:"Sun Dec 27, 1:00 PM ET",t:"2026-12-27T18:00:00Z"},{w:16,a:"NE",h:"NYJ",d:"Sun Dec 27, 1:00 PM ET",t:"2026-12-27T18:00:00Z"},{w:16,a:"CAR",h:"PIT",d:"Sun Dec 27, 1:00 PM ET",t:"2026-12-27T18:00:00Z"},{w:16,a:"TEN",h:"LV",d:"Sun Dec 27, 4:05 PM ET",t:"2026-12-27T21:05:00Z"},{w:16,a:"SF",h:"KC",d:"Sun Dec 27, 4:25 PM ET",t:"2026-12-27T21:25:00Z"},{w:16,a:"JAX",h:"DAL",d:"Sun Dec 27, 8:20 PM ET",t:"2026-12-28T01:20:00Z"},{w:16,a:"NYG",h:"DET",d:"Mon Dec 28, 8:15 PM ET",t:"2026-12-29T01:15:00Z"},{w:17,a:"BAL",h:"CIN",d:"Thu Dec 31, 8:15 PM ET",t:"2027-01-01T01:15:00Z"},{w:17,a:"NO",h:"ATL",d:"Sun Jan 3, 1:00 PM ET",t:"2027-01-03T18:00:00Z"},{w:17,a:"SEA",h:"CAR",d:"Sun Jan 3, 1:00 PM ET",t:"2027-01-03T18:00:00Z"},{w:17,a:"IND",h:"CLE",d:"Sun Jan 3, 1:00 PM ET",t:"2027-01-03T18:00:00Z"},{w:17,a:"NYG",h:"DAL",d:"Sun Jan 3, 1:00 PM ET",t:"2027-01-03T18:00:00Z"},{w:17,a:"WAS",h:"JAX",d:"Sun Jan 3, 1:00 PM ET",t:"2027-01-03T18:00:00Z"},{w:17,a:"KC",h:"LAC",d:"Sun Jan 3, 1:00 PM ET",t:"2027-01-03T18:00:00Z"},{w:17,a:"BUF",h:"MIA",d:"Sun Jan 3, 1:00 PM ET",t:"2027-01-03T18:00:00Z"},{w:17,a:"DEN",h:"NE",d:"Sun Jan 3, 1:00 PM ET",t:"2027-01-03T18:00:00Z"},{w:17,a:"MIN",h:"NYJ",d:"Sun Jan 3, 1:00 PM ET",t:"2027-01-03T18:00:00Z"},{w:17,a:"LA",h:"TB",d:"Sun Jan 3, 1:00 PM ET",t:"2027-01-03T18:00:00Z"},{w:17,a:"PIT",h:"TEN",d:"Sun Jan 3, 1:00 PM ET",t:"2027-01-03T18:00:00Z"},{w:17,a:"LV",h:"ARI",d:"Sun Jan 3, 4:05 PM ET",t:"2027-01-03T21:05:00Z"},{w:17,a:"DET",h:"CHI",d:"Sun Jan 3, 4:25 PM ET",t:"2027-01-03T21:25:00Z"},{w:17,a:"PHI",h:"SF",d:"Sun Jan 3, 8:20 PM ET",t:"2027-01-04T01:20:00Z"},{w:17,a:"HOU",h:"GB",d:"Mon Jan 4, 8:15 PM ET",t:"2027-01-05T01:15:00Z"},{w:18,a:"SF",h:"ARI",d:"Sun Jan 10, 1:00 PM ET",t:"2027-01-10T18:00:00Z"},{w:18,a:"PIT",h:"BAL",d:"Sun Jan 10, 1:00 PM ET",t:"2027-01-10T18:00:00Z"},{w:18,a:"NYJ",h:"BUF",d:"Sun Jan 10, 1:00 PM ET",t:"2027-01-10T18:00:00Z"},{w:18,a:"ATL",h:"CAR",d:"Sun Jan 10, 1:00 PM ET",t:"2027-01-10T18:00:00Z"},{w:18,a:"CLE",h:"CIN",d:"Sun Jan 10, 1:00 PM ET",t:"2027-01-10T18:00:00Z"},{w:18,a:"LAC",h:"DEN",d:"Sun Jan 10, 1:00 PM ET",t:"2027-01-10T18:00:00Z"},{w:18,a:"DET",h:"GB",d:"Sun Jan 10, 1:00 PM ET",t:"2027-01-10T18:00:00Z"},{w:18,a:"TEN",h:"HOU",d:"Sun Jan 10, 1:00 PM ET",t:"2027-01-10T18:00:00Z"},{w:18,a:"JAX",h:"IND",d:"Sun Jan 10, 1:00 PM ET",t:"2027-01-10T18:00:00Z"},{w:18,a:"LV",h:"KC",d:"Sun Jan 10, 1:00 PM ET",t:"2027-01-10T18:00:00Z"},{w:18,a:"SEA",h:"LA",d:"Sun Jan 10, 1:00 PM ET",t:"2027-01-10T18:00:00Z"},{w:18,a:"CHI",h:"MIN",d:"Sun Jan 10, 1:00 PM ET",t:"2027-01-10T18:00:00Z"},{w:18,a:"MIA",h:"NE",d:"Sun Jan 10, 1:00 PM ET",t:"2027-01-10T18:00:00Z"},{w:18,a:"TB",h:"NO",d:"Sun Jan 10, 1:00 PM ET",t:"2027-01-10T18:00:00Z"},{w:18,a:"PHI",h:"NYG",d:"Sun Jan 10, 1:00 PM ET",t:"2027-01-10T18:00:00Z"},{w:18,a:"DAL",h:"WAS",d:"Sun Jan 10, 1:00 PM ET",t:"2027-01-10T18:00:00Z"}];
+
+function currentSeasonWeek() {
+  var now = new Date();
+  var seasonStart = new Date('2026-09-09T00:00:00-04:00');
+  if (now < seasonStart) return 1;
+  var diffDays = Math.floor((now - seasonStart) / 86400000);
+  var week = Math.floor(diffDays / 7) + 1;
+  if (week < 1) week = 1;
+  if (week > 18) week = 18;
+  return week;
+}
+
+function normalizeTeam(t) {
+  if (!t) return '';
+  var up = t.toUpperCase().trim();
+  return TEAM_ALIASES[up] || up;
+}
+
+var leagues = [];
+var activeTab = 'games';
+var selectedWeek = currentSeasonWeek();
+var gameFilter = 'all';
+var scoredPlayers = {};
+var loaded = false;
+
+var BREEZEWOOD_W1_MINE = [
+  {n: "Jalen Hurts", p: "QB", t: "PHI"},
+  {n: "Quinshon Judkins", p: "RB", t: "CLE"},
+  {n: "Ja'Marr Chase", p: "WR", t: "CIN"},
+  {n: "Drake London", p: "WR", t: "ATL"},
+  {n: "Michael Mayer", p: "TE", t: "LV"},
+  {n: "Bhayshul Tuten", p: "RB", t: "JAX"},
+  {n: "Courtland Sutton", p: "WR", t: "DEN"},
+  {n: "Steelers D/ST", p: "DEF", t: "PIT"},
+  {n: "Chris Boswell", p: "K", t: "PIT"}
+];
+var BREEZEWOOD_W1_OPP = [
+  {n: "Baker Mayfield", p: "QB", t: "TB"},
+  {n: "Christian McCaffrey", p: "RB", t: "SF"},
+  {n: "A.J. Brown", p: "WR", t: "NE"},
+  {n: "DeVonta Smith", p: "WR", t: "PHI"},
+  {n: "Sam LaPorta", p: "TE", t: "DET"},
+  {n: "Davante Adams", p: "WR", t: "LA"},
+  {n: "MarShawn Lloyd", p: "RB", t: "GB"},
+  {n: "Titans D/ST", p: "DEF", t: "TEN"},
+  {n: "Cam Little", p: "K", t: "JAX"}
+];
+
+var DELOITTE_W1_MINE = [
+  {n: "Jaxson Dart", p: "QB", t: "NYG"},
+  {n: "Breece Hall", p: "RB", t: "NYJ"},
+  {n: "Bucky Irving", p: "RB", t: "TB"},
+  {n: "Puka Nacua", p: "WR", t: "LA"},
+  {n: "CeeDee Lamb", p: "WR", t: "DAL"},
+  {n: "Tucker Kraft", p: "TE", t: "GB"},
+  {n: "Emeka Egbuka", p: "WR", t: "TB"},
+  {n: "Bhayshul Tuten", p: "RB", t: "JAX"},
+  {n: "Jaylen Warren", p: "RB", t: "PIT"}
+];
+var DELOITTE_W1_OPP = [
+  {n: "Lamar Jackson", p: "QB", t: "BAL"},
+  {n: "James Cook", p: "RB", t: "BUF"},
+  {n: "Saquon Barkley", p: "RB", t: "PHI"},
+  {n: "George Pickens", p: "WR", t: "DAL"},
+  {n: "Marvin Harrison Jr.", p: "WR", t: "ARI"},
+  {n: "Colston Loveland", p: "TE", t: "CHI"},
+  {n: "Chris Godwin Jr.", p: "WR", t: "TB"},
+  {n: "Jonathon Brooks", p: "RB", t: "CAR"},
+  {n: "Alec Pierce", p: "WR", t: "IND"}
+];
+
+var DFL_W1_MINE = [
+  {n: "Daniel Jones", p: "QB", t: "IND"},
+  {n: "Jonathan Taylor", p: "RB", t: "IND"},
+  {n: "Christian McCaffrey", p: "RB", t: "SF"},
+  {n: "CeeDee Lamb", p: "WR", t: "DAL"},
+  {n: "A.J. Brown", p: "WR", t: "NE"},
+  {n: "T.J. Hockenson", p: "TE", t: "MIN"},
+  {n: "Tetairoa McMillan", p: "WR", t: "CAR"},
+  {n: "Parker Washington", p: "WR", t: "JAX"},
+  {n: "Brandon Aubrey", p: "K", t: "DAL"},
+  {n: "Steelers D/ST", p: "DEF", t: "PIT"}
+];
+var DFL_W1_OPP = [
+  {n: "Baker Mayfield", p: "QB", t: "TB"},
+  {n: "Bijan Robinson", p: "RB", t: "ATL"},
+  {n: "Bucky Irving", p: "RB", t: "TB"},
+  {n: "Amon-Ra St. Brown", p: "WR", t: "DET"},
+  {n: "George Pickens", p: "WR", t: "DAL"},
+  {n: "Kyle Pitts", p: "TE", t: "ATL"},
+  {n: "Davante Adams", p: "WR", t: "LA"},
+  {n: "David Montgomery", p: "RB", t: "HOU"},
+  {n: "Evan McPherson", p: "K", t: "CIN"},
+  {n: "Chiefs D/ST", p: "DEF", t: "KC"}
+];
+
+var RDL_W1_MINE = [
+  {n: "Jayden Daniels", p: "QB", t: "WAS"},
+  {n: "D'Andre Swift", p: "RB", t: "CHI"},
+  {n: "Javonte Williams", p: "RB", t: "DAL"},
+  {n: "Ja'Marr Chase", p: "WR", t: "CIN"},
+  {n: "Chris Olave", p: "WR", t: "NO"},
+  {n: "Kyle Pitts", p: "TE", t: "ATL"},
+  {n: "Quentin Johnston", p: "WR", t: "LAC"},
+  {n: "Jacory Croskey-Merritt", p: "RB", t: "WAS"},
+  {n: "Deebo Samuel Sr.", p: "WR", t: "SF"}
+];
+var RDL_W1_OPP = [
+  {n: "Joe Burrow", p: "QB", t: "CIN"},
+  {n: "Jahmyr Gibbs", p: "RB", t: "DET"},
+  {n: "David Montgomery", p: "RB", t: "HOU"},
+  {n: "Nico Collins", p: "WR", t: "HOU"},
+  {n: "Mike Evans", p: "WR", t: "SF"},
+  {n: "Isaiah Likely", p: "TE", t: "NYG"},
+  {n: "Jadarian Price", p: "RB", t: "SEA"},
+  {n: "Michael Wilson", p: "WR", t: "ARI"},
+  {n: "DJ Moore", p: "WR", t: "BUF"}
+];
+
+function uid() { return Math.random().toString(36).slice(2, 9); }
+
+function makeBaselineRoster(name) {
+  var list = BASELINE_ROSTERS[name] || [];
+  return list.map(function(pl) { return { id: 'p' + uid(), name: pl.n, pos: pl.p, team: normalizeTeam(pl.t) }; });
+}
+
+function defaultLeagues() {
+  return LEAGUE_NAMES.map(function(name) {
+    return { id: 'league-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), name: name, myPlayers: makeBaselineRoster(name), oppPlayers: [] };
+  });
+}
+
+function seedBreezewoodWeek1(leaguesArr) {
+  var l = leaguesArr.filter(function(x) { return x.name === 'Breezewood'; })[0];
+  if (!l) return;
+  l.myPlayers = BREEZEWOOD_W1_MINE.map(function(pl) {
+    return { id: 'p' + uid(), name: pl.n, pos: pl.p, team: normalizeTeam(pl.t) };
+  });
+  l.oppPlayers = BREEZEWOOD_W1_OPP.map(function(pl) {
+    return { id: 'p' + uid(), name: pl.n, pos: pl.p, team: normalizeTeam(pl.t) };
+  });
+}
+
+function seedDeloitteWeek1(leaguesArr) {
+  var l = leaguesArr.filter(function(x) { return x.name === 'Deloitte'; })[0];
+  if (!l) return;
+  l.myPlayers = DELOITTE_W1_MINE.map(function(pl) {
+    return { id: 'p' + uid(), name: pl.n, pos: pl.p, team: normalizeTeam(pl.t) };
+  });
+  l.oppPlayers = DELOITTE_W1_OPP.map(function(pl) {
+    return { id: 'p' + uid(), name: pl.n, pos: pl.p, team: normalizeTeam(pl.t) };
+  });
+}
+
+function seedDFLWeek1(leaguesArr) {
+  var l = leaguesArr.filter(function(x) { return x.name === 'DFL'; })[0];
+  if (!l) return;
+  l.myPlayers = DFL_W1_MINE.map(function(pl) {
+    return { id: 'p' + uid(), name: pl.n, pos: pl.p, team: normalizeTeam(pl.t) };
+  });
+  l.oppPlayers = DFL_W1_OPP.map(function(pl) {
+    return { id: 'p' + uid(), name: pl.n, pos: pl.p, team: normalizeTeam(pl.t) };
+  });
+}
+
+function seedRDLWeek1(leaguesArr) {
+  var l = leaguesArr.filter(function(x) { return x.name === 'RDL'; })[0];
+  if (!l) return;
+  l.myPlayers = RDL_W1_MINE.map(function(pl) {
+    return { id: 'p' + uid(), name: pl.n, pos: pl.p, team: normalizeTeam(pl.t) };
+  });
+  l.oppPlayers = RDL_W1_OPP.map(function(pl) {
+    return { id: 'p' + uid(), name: pl.n, pos: pl.p, team: normalizeTeam(pl.t) };
+  });
+}
+
+function loadData() {
+  leagues = defaultLeagues();
+  seedBreezewoodWeek1(leagues);
+  seedDeloitteWeek1(leagues);
+  seedDFLWeek1(leagues);
+  seedRDLWeek1(leagues);
+  loaded = true;
+  buildWeekSelect();
+  render();
+}
+
+function saveData() {
+  // No persistence layer: this file is meant to be re-uploaded/replaced
+  // whenever the matchups change, so there is nothing to write out here.
+}
+
+function slug(s) {
+  return (s || '').toString().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+}
+
+function computeGameData(week) {
+  var weekGames = SCHEDULE_ALL.filter(function(g) { return g.w === week; });
+  var teamToGame = {};
+  weekGames.forEach(function(g, idx) {
+    teamToGame[g.h] = idx;
+    teamToGame[g.a] = idx;
+  });
+
+  var gameBuckets = weekGames.map(function() { return { forMap: {}, againstMap: {} }; });
+  var unmatched = { forMap: {}, againstMap: {} };
+
+  function addToBucket(side, p, leagueName) {
+    var idx = teamToGame[p.team];
+    var mapKey = side === 'for' ? 'forMap' : 'againstMap';
+    var bucket = idx !== undefined ? gameBuckets[idx] : unmatched;
+    var key = (p.team || '') + '|' + p.name.toLowerCase();
+    var map = bucket[mapKey];
+    if (!map[key]) {
+      map[key] = {
+        name: p.name, pos: p.pos, team: p.team, leagues: [],
+        uid: 'sc-' + side + '-' + slug(p.team) + '-' + slug(p.name)
+      };
+    }
+    if (map[key].leagues.indexOf(leagueName) === -1) map[key].leagues.push(leagueName);
+  }
+
+  leagues.forEach(function(l) {
+    l.myPlayers.forEach(function(p) { addToBucket('for', p, l.name); });
+    l.oppPlayers.forEach(function(p) { addToBucket('against', p, l.name); });
+  });
+
+  function mapToList(map) {
+    return Object.keys(map).map(function(k) { return map[k]; });
+  }
+
+  return {
+    weekGames: weekGames,
+    gameBuckets: gameBuckets.map(function(b) {
+      return { forList: mapToList(b.forMap), againstList: mapToList(b.againstMap) };
+    }),
+    unmatched: { forList: mapToList(unmatched.forMap), againstList: mapToList(unmatched.againstMap) }
+  };
+}
+
+function showToast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(function() { t.classList.remove('show'); }, 2200);
+}
+
+function snapshotCheerLineHtml(p) {
+  var countTag = p.leagues.length > 1 ? ' (' + p.leagues.length + 'x)' : '';
+  var leagueLabel = p.leagues.join(', ');
+  return '<div class="cheer-line">' + esc(p.name) + (p.pos ? ' (' + esc(p.pos) + ')' : '') + esc(countTag) + '<br><span class="league-tag">' + esc(leagueLabel) + '</span></div>';
+}
+
+function snapshotGameCardHtml(title, timeLabel, bucket, liveState) {
+  var badge = '';
+  if (liveState === 'live') badge = '<span class="live-badge"><span class="live-dot"></span>LIVE</span>';
+  else if (liveState === 'final') badge = '<span class="final-badge">FINAL</span>';
+
+  var verdict = '';
+  if (bucket.forList.length && !bucket.againstList.length) verdict = '<span class="verdict-badge win">All good</span>';
+  else if (bucket.againstList.length && !bucket.forList.length) verdict = '<span class="verdict-badge lose">Rough one</span>';
+  else if (bucket.forList.length && bucket.againstList.length) verdict = '<span class="verdict-badge mixed">Mixed bag</span>';
+
+  return [
+    '<div class="card">',
+    '<div class="game-title">' + esc(title) + badge + verdict + '</div>',
+    '<div class="game-time">' + esc(timeLabel) + '</div>',
+    '<div class="game-cols">',
+    '<div class="game-col"><div class="game-col-label for">You have</div>',
+    bucket.forList.length ? bucket.forList.map(snapshotCheerLineHtml).join('') : '<div class="empty">Nobody</div>',
+    '</div>',
+    '<div class="game-col"><div class="game-col-label against">They have</div>',
+    bucket.againstList.length ? bucket.againstList.map(snapshotCheerLineHtml).join('') : '<div class="empty">Nobody</div>',
+    '</div>',
+    '</div></div>'
+  ].join('');
+}
+
+function buildSnapshotContent(week) {
+  var data = computeGameData(week);
+  var now = new Date();
+  var stamp = now.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+  var totalFor = 0, totalAgainst = 0, gamesInPlay = 0, liveNow = 0;
+  var cardsHtml = '';
+  data.weekGames.forEach(function(g, idx) {
+    var b = data.gameBuckets[idx];
+    if (!b.forList.length && !b.againstList.length) return;
+    var state = gameLiveState(g);
+    gamesInPlay++;
+    if (state === 'live') liveNow++;
+    totalFor += b.forList.length;
+    totalAgainst += b.againstList.length;
+    cardsHtml += snapshotGameCardHtml(g.a + ' @ ' + g.h, g.d, b, state);
+  });
+  if (data.unmatched.forList.length || data.unmatched.againstList.length) {
+    cardsHtml += snapshotGameCardHtml('Unmatched team codes', 'Double check these team abbreviations', data.unmatched, 'none');
+  }
+  if (!cardsHtml) cardsHtml = '<div class="empty">No starters entered for week ' + week + ' yet.</div>';
+
+  var summaryHtml = [
+    '<div class="summary-bar">',
+    '<div class="summary-stat"><div class="num">' + gamesInPlay + '</div><div class="lbl">Games in play</div></div>',
+    '<div class="summary-stat"><div class="num red">' + liveNow + '</div><div class="lbl">Live now</div></div>',
+    '<div class="summary-stat"><div class="num green">' + totalFor + '</div><div class="lbl">Your starters</div></div>',
+    '<div class="summary-stat"><div class="num red">' + totalAgainst + '</div><div class="lbl">Opponent starters</div></div>',
+    '</div>'
+  ].join('');
+
+  return { stamp: stamp, summaryHtml: summaryHtml, cardsHtml: cardsHtml };
+}
+
+function exportSnapshotPDF() {
+  var btn = document.getElementById('snapshot-btn');
+
+  // Open the tab immediately, synchronously, inside the tap/click itself.
+  // Mobile browsers only allow this while still inside a user gesture -
+  // if we wait for html2canvas to finish first (it's async), the browser
+  // treats the later window.open/download as unrequested and blocks it.
+  // That's the root cause of downloads silently failing on phones.
+  var win = window.open('', '_blank');
+  if (!win) {
+    showToast('Please allow pop-ups for this page, then try again');
+    return;
+  }
+  win.document.write(
+    '<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+    '<title>Building snapshot...</title></head><body style="margin:0;background:#0f1115;color:#e8eaed;' +
+    'font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;display:flex;' +
+    'align-items:center;justify-content:center;height:100vh;font-size:15px;">Building your snapshot&hellip;</body></html>'
+  );
+
+  if (typeof html2canvas === 'undefined') {
+    win.document.body.textContent = 'Still loading. Close this tab and try again in a second.';
+    return;
+  }
+
+  var week = selectedWeek;
+  var content = buildSnapshotContent(week);
+  if (btn) { btn.disabled = true; btn.textContent = 'Building snapshot...'; }
+
+  var container = document.createElement('div');
+  container.style.position = 'fixed';
+  container.style.left = '-9999px';
+  container.style.top = '0';
+  container.style.width = '700px';
+  container.style.background = '#0f1115';
+  container.style.padding = '20px 16px 30px';
+  container.style.boxSizing = 'border-box';
+  container.innerHTML = '<h1>Week ' + week + ' matchups</h1>' +
+    '<div class="sub">Snapshot taken ' + esc(content.stamp) + '. This is a point-in-time capture &mdash; scores and statuses will not update.</div>' +
+    content.summaryHtml + content.cardsHtml;
+  document.body.appendChild(container);
+
+  html2canvas(container, { backgroundColor: '#0f1115', scale: 2 }).then(function(canvas) {
+    document.body.removeChild(container);
+    var imgData = canvas.toDataURL('image/png');
+    var pageHtml = '<!DOCTYPE html><html><head><meta charset="UTF-8">' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+      '<title>Week ' + week + ' matchups snapshot</title>' +
+      '<style>body{margin:0;background:#0f1115;font-family:-apple-system,BlinkMacSystemFont,' +
+      '"Segoe UI",Roboto,sans-serif;} .hint{color:#9aa0ab;font-size:13px;text-align:center;' +
+      'padding:14px 16px;} img{display:block;width:100%;height:auto;}</style></head><body>' +
+      '<div class="hint">Press and hold the image to save it to your device.</div>' +
+      '<img src="' + imgData + '" alt="Week ' + week + ' matchups" />' +
+      '</body></html>';
+    win.document.open();
+    win.document.write(pageHtml);
+    win.document.close();
+    showToast('Snapshot ready in new tab');
+    if (btn) { btn.disabled = false; btn.textContent = 'Download matchup snapshot'; }
+  }).catch(function(err) {
+    if (container.parentNode) document.body.removeChild(container);
+    console.error(err);
+    try { win.document.body.textContent = 'Could not build the snapshot. Close this tab and try again.'; } catch (e2) {}
+    showToast('Could not build snapshot');
+    if (btn) { btn.disabled = false; btn.textContent = 'Download matchup snapshot'; }
+  });
+}
+
+function addPlayer(leagueId, side, name, pos, team) {
+  if (!name || !name.trim()) return;
+  var l = leagues.filter(function(x) { return x.id === leagueId; })[0];
+  if (!l) return;
+  var target = side === 'mine' ? l.myPlayers : l.oppPlayers;
+  target.push({ id: 'p' + uid(), name: name.trim(), pos: pos || '', team: normalizeTeam(team) });
+  saveData();
+  render();
+}
+
+function removePlayer(leagueId, side, playerId) {
+  var l = leagues.filter(function(x) { return x.id === leagueId; })[0];
+  if (!l) return;
+  if (side === 'mine') l.myPlayers = l.myPlayers.filter(function(p) { return p.id !== playerId; });
+  else l.oppPlayers = l.oppPlayers.filter(function(p) { return p.id !== playerId; });
+  saveData();
+  render();
+}
+
+function resetToBaseline(leagueId) {
+  var l = leagues.filter(function(x) { return x.id === leagueId; })[0];
+  if (!l) return;
+  l.myPlayers = makeBaselineRoster(l.name);
+  saveData();
+  render();
+}
+
+function clearOpponent(leagueId) {
+  var l = leagues.filter(function(x) { return x.id === leagueId; })[0];
+  if (!l) return;
+  l.oppPlayers = [];
+  saveData();
+  render();
+}
+
+function esc(s) {
+  var d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+function buildWeekSelect() {
+  var sel = document.getElementById('week-select');
+  sel.innerHTML = '';
+  for (var w = 1; w <= 18; w++) {
+    var opt = document.createElement('option');
+    opt.value = w;
+    opt.textContent = 'Week ' + w;
+    if (w === selectedWeek) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  sel.onchange = function() { selectedWeek = parseInt(sel.value, 10); render(); };
+}
+
+function renderLeaguesTab() {
+  var c = document.getElementById('content');
+  c.innerHTML = leagues.map(function(l) { return leagueCardHtml(l); }).join('');
+  c.innerHTML += '<div class="save-hint">This file doesn\u2019t save changes between visits &mdash; edits here last for this viewing only. Your starters default to your baseline roster each league; use "Reset to baseline" to snap back, and "Clear opponent" wipes just the opposing roster.</div>';
+
+  leagues.forEach(function(l) {
+    var resetBtn = document.getElementById('resetbase-' + l.id);
+    if (resetBtn) resetBtn.onclick = function() {
+      if (confirm('Reset ' + l.name + ' starters back to your baseline roster?')) resetToBaseline(l.id);
+    };
+    var clearOppBtn = document.getElementById('clearopp-' + l.id);
+    if (clearOppBtn) clearOppBtn.onclick = function() {
+      if (confirm('Clear opponent starters for ' + l.name + '?')) clearOpponent(l.id);
+    };
+
+    ['mine', 'opp'].forEach(function(side) {
+      wireAutocomplete(l.id, side);
+      var addBtn = document.getElementById('addp-' + side + '-' + l.id);
+      if (addBtn) {
+        addBtn.onclick = function() {
+          var nameEl = document.getElementById('in-name-' + side + '-' + l.id);
+          var posEl = document.getElementById('in-pos-' + side + '-' + l.id);
+          var teamEl = document.getElementById('in-team-' + side + '-' + l.id);
+          addPlayer(l.id, side, nameEl.value, posEl.value, teamEl.value);
+        };
+      }
+    });
+
+    l.myPlayers.forEach(function(p) {
+      var x = document.getElementById('rm-mine-' + p.id);
+      if (x) x.onclick = function() { removePlayer(l.id, 'mine', p.id); };
+    });
+    l.oppPlayers.forEach(function(p) {
+      var x = document.getElementById('rm-opp-' + p.id);
+      if (x) x.onclick = function() { removePlayer(l.id, 'opp', p.id); };
+    });
+  });
+}
+
+function leagueCardHtml(l) {
+  return [
+    '<div class="card">',
+    '<div class="league-header"><span class="lname">' + esc(l.name) + '</span>',
+    '<div class="header-btns"><button class="clear-btn" id="resetbase-' + l.id + '">Reset to baseline</button>',
+    '<button class="clear-btn" id="clearopp-' + l.id + '">Clear opponent</button></div></div>',
+    '<div class="section-label">Your starters (' + l.myPlayers.length + ')</div>',
+    l.myPlayers.map(function(p) { return playerRowHtml(p, 'mine'); }).join('') || '<div class="empty">No starters added</div>',
+    addRowHtml(l.id, 'mine'),
+    '<div class="section-label">Opponent starters (' + l.oppPlayers.length + ')</div>',
+    l.oppPlayers.map(function(p) { return playerRowHtml(p, 'opp'); }).join('') || '<div class="empty">No opponent added yet</div>',
+    addRowHtml(l.id, 'opp'),
+    '</div>'
+  ].join('');
+}
+
+function playerRowHtml(p, side) {
+  var badge = side === 'mine' ? '<span class="badge for">FOR</span>' : '<span class="badge against">AGAINST</span>';
+  return [
+    '<div class="player-row">', badge,
+    '<span class="player-name">' + esc(p.name) + '</span>',
+    '<span class="player-meta">' + esc(p.pos) + (p.pos && p.team ? ' &middot; ' : '') + esc(p.team) + '</span>',
+    '<span class="rm-x" id="rm-' + side + '-' + p.id + '">Remove</span>',
+    '</div>'
+  ].join('');
+}
+
+function addRowHtml(leagueId, side) {
+  return [
+    '<div class="autocomplete-wrap">',
+    '<input type="text" class="search-input" autocomplete="off" placeholder="Search player name or team D/ST" id="search-' + side + '-' + leagueId + '" />',
+    '<div class="dropdown" id="dropdown-' + side + '-' + leagueId + '" style="display:none"></div>',
+    '</div>',
+    '<span class="manual-toggle" id="manual-toggle-' + side + '-' + leagueId + '">Can\u2019t find them? Add manually</span>',
+    '<div class="add-row" id="manual-row-' + side + '-' + leagueId + '" style="display:none">',
+    '<input class="name" type="text" placeholder="Player name" id="in-name-' + side + '-' + leagueId + '" />',
+    '<select id="in-pos-' + side + '-' + leagueId + '">',
+    '<option value="">Pos</option><option>QB</option><option>RB</option><option>WR</option><option>TE</option><option>K</option><option>DEF</option>',
+    '</select>',
+    '<input class="team" type="text" placeholder="Tm" maxlength="4" id="in-team-' + side + '-' + leagueId + '" />',
+    '<button id="addp-' + side + '-' + leagueId + '">Add</button>',
+    '</div>'
+  ].join('');
+}
+
+function searchPlayers(q) {
+  q = q.toLowerCase().trim();
+  if (!q) return [];
+  var starts = [];
+  var contains = [];
+  PLAYERS.forEach(function(p) {
+    var n = p.n.toLowerCase();
+    if (n.indexOf(q) === 0 || p.t.toLowerCase() === q) starts.push(p);
+    else if (n.indexOf(q) !== -1) contains.push(p);
+  });
+  return starts.concat(contains).slice(0, 8);
+}
+
+function wireAutocomplete(leagueId, side) {
+  var input = document.getElementById('search-' + side + '-' + leagueId);
+  var dropdown = document.getElementById('dropdown-' + side + '-' + leagueId);
+  if (!input || !dropdown) return;
+
+  function showResults() {
+    var results = searchPlayers(input.value);
+    if (!results.length) { dropdown.style.display = 'none'; dropdown.innerHTML = ''; return; }
+    dropdown.innerHTML = results.map(function(p, i) {
+      return '<div class="dropdown-item" data-idx="' + i + '"><span>' + esc(p.n) + '</span><span class="meta">' + esc(p.p) + ' &middot; ' + esc(p.t) + '</span></div>';
+    }).join('');
+    dropdown.style.display = 'block';
+    var items = dropdown.querySelectorAll('.dropdown-item');
+    items.forEach(function(item, i) {
+      item.onmousedown = function(e) {
+        e.preventDefault();
+        var p = results[i];
+        addPlayer(leagueId, side, p.n, p.p, p.t);
+      };
+    });
+  }
+
+  input.oninput = showResults;
+  input.onfocus = showResults;
+  input.onblur = function() { setTimeout(function() { dropdown.style.display = 'none'; }, 150); };
+  input.onkeydown = function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      var results = searchPlayers(input.value);
+      if (results.length) addPlayer(leagueId, side, results[0].n, results[0].p, results[0].t);
+    }
+  };
+
+  var manualToggle = document.getElementById('manual-toggle-' + side + '-' + leagueId);
+  var manualRow = document.getElementById('manual-row-' + side + '-' + leagueId);
+  if (manualToggle && manualRow) {
+    manualToggle.onclick = function() {
+      var showing = manualRow.style.display !== 'none';
+      manualRow.style.display = showing ? 'none' : 'flex';
+      manualToggle.textContent = showing ? 'Can\u2019t find them? Add manually' : 'Hide manual entry';
+    };
+  }
+}
+
+function gameLiveState(g) {
+  var start = new Date(g.t);
+  var now = new Date();
+  var end = new Date(start.getTime() + 3.5 * 3600000);
+  if (now < start) return 'upcoming';
+  if (now >= start && now <= end) return 'live';
+  return 'final';
+}
+
+function renderGamesTab() {
+  var c = document.getElementById('content');
+  var data = computeGameData(selectedWeek);
+  var weekGames = data.weekGames;
+  var gameBuckets = data.gameBuckets;
+  var unmatched = data.unmatched;
+
+  var anyGamePlayers = gameBuckets.some(function(b) { return b.forList.length || b.againstList.length; });
+  var anyUnmatched = unmatched.forList.length || unmatched.againstList.length;
+
+  if (!anyGamePlayers && !anyUnmatched) {
+    c.innerHTML = '<div class="empty big">Add starters in the My starters tab for week ' + selectedWeek + ' and they will show up here grouped by NFL matchup.</div>';
+    return;
+  }
+
+  var totalFor = 0, totalAgainst = 0, gamesInPlay = 0, liveNow = 0;
+  gameBuckets.forEach(function(b, idx) {
+    if (gameLiveState(weekGames[idx]) === 'final') return;
+    if (b.forList.length || b.againstList.length) {
+      gamesInPlay++;
+      if (gameLiveState(weekGames[idx]) === 'live') liveNow++;
+    }
+    totalFor += b.forList.length;
+    totalAgainst += b.againstList.length;
+  });
+
+  var toolbar = [
+    '<div class="games-toolbar">',
+    '<button class="filter-btn' + (gameFilter === 'all' ? ' active' : '') + '" id="filter-all">All games</button>',
+    '<button class="filter-btn' + (gameFilter === 'mine' ? ' active' : '') + '" id="filter-mine">My games only</button>',
+    '</div>'
+  ].join('');
+
+  var summary = [
+    '<div class="summary-bar">',
+    '<div class="summary-stat"><div class="num">' + gamesInPlay + '</div><div class="lbl">Games in play</div></div>',
+    '<div class="summary-stat"><div class="num red">' + liveNow + '</div><div class="lbl">Live now</div></div>',
+    '<div class="summary-stat"><div class="num green">' + totalFor + '</div><div class="lbl">Your starters</div></div>',
+    '<div class="summary-stat"><div class="num red">' + totalAgainst + '</div><div class="lbl">Opponent starters</div></div>',
+    '</div>'
+  ].join('');
+
+  var html = '';
+  var hadFinals = false;
+  weekGames.forEach(function(g, idx) {
+    var b = gameBuckets[idx];
+    if (!b.forList.length && !b.againstList.length) return;
+    if (gameFilter === 'mine' && !b.forList.length) return;
+    if (gameLiveState(g) === 'final') { hadFinals = true; return; }
+    html += gameCardHtml(g.a + ' @ ' + g.h, g.d, b, gameLiveState(g));
+  });
+  if (anyUnmatched && gameFilter === 'all') {
+    html += gameCardHtml('Unmatched team codes', 'Double check these team abbreviations', unmatched, 'none');
+  }
+  if (!html) html = '<div class="empty big">' + (hadFinals ? 'All your games for week ' + selectedWeek + ' have gone final.' : 'No games with your own starters this week yet.') + '</div>';
+
+  c.innerHTML = toolbar + summary + html;
+
+  var filterAllBtn = document.getElementById('filter-all');
+  var filterMineBtn = document.getElementById('filter-mine');
+  if (filterAllBtn) filterAllBtn.onclick = function() { gameFilter = 'all'; render(); };
+  if (filterMineBtn) filterMineBtn.onclick = function() { gameFilter = 'mine'; render(); };
+
+  [].concat.apply([], gameBuckets.map(function(b) { return b.forList.concat(b.againstList); }))
+    .concat(unmatched.forList, unmatched.againstList)
+    .forEach(function(p) {
+      var el = document.getElementById(p.uid);
+      if (el) el.onclick = function() { toggleScored(p.uid); };
+    });
+}
+
+function toggleScored(uid) {
+  scoredPlayers[uid] = !scoredPlayers[uid];
+  render();
+}
+
+function gameCardHtml(title, timeLabel, bucket, liveState) {
+  var badge = '';
+  if (liveState === 'live') badge = '<span class="live-badge"><span class="live-dot"></span>LIVE</span>';
+  else if (liveState === 'final') badge = '<span class="final-badge">FINAL</span>';
+
+  var verdict = '';
+  if (bucket.forList.length && !bucket.againstList.length) verdict = '<span class="verdict-badge win">All good</span>';
+  else if (bucket.againstList.length && !bucket.forList.length) verdict = '<span class="verdict-badge lose">Rough one</span>';
+  else if (bucket.forList.length && bucket.againstList.length) verdict = '<span class="verdict-badge mixed">Mixed bag</span>';
+
+  return [
+    '<div class="card game-card' + (liveState === 'live' ? ' is-live' : '') + '">',
+    '<div class="game-title">' + esc(title) + badge + verdict + '</div>',
+    '<div class="game-time">' + esc(timeLabel) + '</div>',
+    '<div class="game-cols">',
+    '<div class="game-col"><div class="game-col-label for">You have</div>',
+    bucket.forList.length ? bucket.forList.map(cheerLineHtml).join('') : '<div class="empty">Nobody</div>',
+    '</div>',
+    '<div class="game-col"><div class="game-col-label against">They have</div>',
+    bucket.againstList.length ? bucket.againstList.map(cheerLineHtml).join('') : '<div class="empty">Nobody</div>',
+    '</div>',
+    '</div></div>'
+  ].join('');
+}
+
+function cheerLineHtml(p) {
+  var scored = !!scoredPlayers[p.uid];
+  var countTag = p.leagues.length > 1 ? ' (' + p.leagues.length + 'x)' : '';
+  var leagueLabel = p.leagues.join(', ');
+  return [
+    '<div class="cheer-line' + (scored ? ' scored' : '') + '" id="' + p.uid + '">',
+    '<span class="check">' + (scored ? '\u2713' : '') + '</span>',
+    esc(p.name) + (p.pos ? ' (' + esc(p.pos) + ')' : '') + esc(countTag),
+    '<br><span class="league-tag">' + esc(leagueLabel) + '</span>',
+    '</div>'
+  ].join('');
+}
+
+function render() {
+  if (!loaded) {
+    document.getElementById('content').innerHTML = '<div class="loading">Loading your leagues...</div>';
+    return;
+  }
+  var tabs = document.querySelectorAll('.tab');
+  for (var i = 0; i < tabs.length; i++) {
+    if (tabs[i].getAttribute('data-tab') === activeTab) tabs[i].classList.add('active');
+    else tabs[i].classList.remove('active');
+  }
+  document.getElementById('week-select').style.display = activeTab === 'games' ? 'inline-block' : 'none';
+  if (activeTab === 'leagues') renderLeaguesTab();
+  else renderGamesTab();
+}
+
+var tabEls = document.querySelectorAll('.tab');
+for (var i = 0; i < tabEls.length; i++) {
+  tabEls[i].onclick = (function(el) {
+    return function() { activeTab = el.getAttribute('data-tab'); render(); };
+  })(tabEls[i]);
+}
+
+document.getElementById('snapshot-btn').onclick = exportSnapshotPDF;
+
+loadData();
+</script>
+</body>
+</html>

@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/modernist-677406e5-5b8f-4bc8-93a9-642fd181659b/styles.css">
+<script src="_ds/modernist-677406e5-5b8f-4bc8-93a9-642fd181659b/_ds_bundle.js"></script>
+<script src="fantasy-data.js"></script>
+<style>
+  body { margin: 0; background: var(--color-neutral-200); font-family: var(--font-body); }
+  a { color: var(--color-accent); } a:hover { color: var(--color-accent-700); }
+  .sc::-webkit-scrollbar { display: none; } .sc { scrollbar-width: none; }
+  input:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+  @keyframes ffpulse { 0%,100% { opacity: 1 } 50% { opacity: .3 } }
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px 0;background:var(--color-neutral-200)">
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px">
+<div style="position:relative;height:100%;display:flex;flex-direction:column;background:var(--color-bg);color:var(--color-text);padding-top:54px;font-family:var(--font-body)">
+
+  <div style="flex:none;padding:8px 18px 0">
+    <div style="display:flex;align-items:baseline;gap:10px">
+      <div style="font-family:var(--font-heading);font-weight:800;font-size:28px;line-height:1;letter-spacing:-0.03em;text-transform:uppercase">{{ screenTitle }}</div>
+      <div onClick="{{ syncAll }}" style="margin-left:auto;cursor:pointer;font-weight:700;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:{{ syncColor }}">{{ syncLabel }}</div>
+    </div>
+    <div class="sc" style="display:flex;overflow-x:auto;margin:12px -18px 0;padding:0 18px;border-bottom:2px solid var(--color-divider)">
+      <sc-for list="{{ weekChips }}" as="c" hint-placeholder-count="6">
+        <div onClick="{{ c.go }}" style="flex:none;cursor:pointer;padding:9px 12px 7px;font-weight:800;font-size:11px;letter-spacing:0.1em;margin-bottom:-2px;border-bottom:3px solid transparent;color:{{ c.color }};border-bottom-color:{{ c.line }}">{{ c.label }}</div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div class="sc" style="flex:1;overflow-y:auto;overflow-x:hidden">
+    <sc-if value="{{ isGames }}" hint-placeholder-val="{{ true }}">
+      <div>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-bottom:2px solid var(--color-divider)">
+          <div style="padding:14px 18px;border-right:1px solid var(--color-divider)">
+            <div style="font-weight:800;font-size:26px;line-height:1">{{ statGames }}</div>
+            <div style="font-weight:600;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-neutral-600);margin-top:4px">Games</div>
+          </div>
+          <div style="padding:14px 18px;border-right:1px solid var(--color-divider)">
+            <div style="font-weight:800;font-size:26px;line-height:1">{{ statFor }}</div>
+            <div style="font-weight:600;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-neutral-600);margin-top:4px">Yours</div>
+          </div>
+          <div style="padding:14px 18px">
+            <div style="font-weight:800;font-size:26px;line-height:1;color:var(--color-accent)">{{ statAgainst }}</div>
+            <div style="font-weight:600;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-neutral-600);margin-top:4px">Against</div>
+          </div>
+        </div>
+        <div style="display:flex;border-bottom:2px solid var(--color-divider)">
+          <div onClick="{{ filterAll }}" style="flex:1;cursor:pointer;padding:10px 18px;font-weight:700;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;border-right:1px solid var(--color-divider);background:{{ fAllBg }};color:{{ fAllFg }}">All games</div>
+          <div onClick="{{ filterMine }}" style="flex:1;cursor:pointer;padding:10px 18px;font-weight:700;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;background:{{ fMineBg }};color:{{ fMineFg }}">Only mine</div>
+        </div>
+        <sc-for list="{{ games }}" as="g" hint-placeholder-count="3">
+          <div style="border-bottom:2px solid var(--color-divider);padding:16px 18px 18px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="font-weight:800;font-size:20px;line-height:1;letter-spacing:-0.02em">{{ g.title }}</div>
+              <div style="margin-left:auto;font-weight:800;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;padding:4px 7px;color:{{ g.badgeFg }};background:{{ g.badgeBg }}">{{ g.badge }}</div>
+            </div>
+            <div style="font-size:11px;color:var(--color-neutral-600);margin-top:5px">{{ g.time }}</div>
+            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));margin-top:14px">
+              <div style="padding-right:12px;border-right:1px solid var(--color-divider)">
+                <div style="font-weight:800;font-size:9px;letter-spacing:0.14em;text-transform:uppercase;padding-bottom:6px;border-bottom:2px solid var(--color-text)">You have</div>
+                <sc-for list="{{ g.forList }}" as="p" hint-placeholder-count="2">
+                  <div onClick="{{ p.toggle }}" style="cursor:pointer;padding:8px 0;border-bottom:1px solid var(--color-neutral-300)">
+                    <div style="font-weight:600;font-size:13px;line-height:1.2;color:{{ p.color }};text-decoration:{{ p.deco }}">{{ p.label }}</div>
+                    <div style="font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--color-neutral-500);margin-top:2px">{{ p.meta }}</div>
+                  </div>
+                </sc-for>
+                <div style="font-size:11px;color:var(--color-neutral-500);padding-top:8px">{{ g.forEmpty }}</div>
+              </div>
+              <div style="padding-left:12px">
+                <div style="font-weight:800;font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--color-accent-700);padding-bottom:6px;border-bottom:2px solid var(--color-accent)">They have</div>
+                <sc-for list="{{ g.againstList }}" as="p" hint-placeholder-count="2">
+                  <div onClick="{{ p.toggle }}" style="cursor:pointer;padding:8px 0;border-bottom:1px solid var(--color-neutral-300)">
+                    <div style="font-weight:600;font-size:13px;line-height:1.2;color:{{ p.color }};text-decoration:{{ p.deco }}">{{ p.label }}</div>
+                    <div style="font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--color-neutral-500);margin-top:2px">{{ p.meta }}</div>
+                  </div>
+                </sc-for>
+                <div style="font-size:11px;color:var(--color-neutral-500);padding-top:8px">{{ g.againstEmpty }}</div>
+              </div>
+            </div>
+          </div>
+        </sc-for>
+        <div style="padding:22px 18px 30px;font-size:11px;line-height:1.6;color:var(--color-neutral-500)">{{ gamesFoot }}</div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isLeagues }}" hint-placeholder-val="{{ false }}">
+      <div>
+        <sc-for list="{{ leagueRows }}" as="l" hint-placeholder-count="4">
+          <div style="border-bottom:2px solid var(--color-divider);padding:16px 18px 18px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="font-weight:800;font-size:21px;line-height:1;letter-spacing:-0.02em">{{ l.name }}</div>
+              <div style="font-weight:800;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;padding:4px 7px;background:{{ l.srcBg }};color:{{ l.srcFg }}">{{ l.src }}</div>
+              <div style="margin-left:auto;font-weight:600;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-neutral-600)">{{ l.counts }}</div>
+            </div>
+            <div style="font-size:11px;line-height:1.45;margin-top:7px;color:{{ l.statusColor }}">{{ l.status }}</div>
+            <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:12px">
+              <div onClick="{{ l.primary }}" style="cursor:pointer;background:var(--color-accent);color:var(--color-bg);font-weight:800;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;padding:11px 10px" style-hover="background:var(--color-accent-600)">{{ l.primaryLabel }}</div>
+              <div onClick="{{ l.edit }}" style="cursor:pointer;border:1px solid var(--color-divider);font-weight:800;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;padding:10px" style-hover="background:var(--color-neutral-200)">Edit</div>
+              <div onClick="{{ l.connect }}" style="cursor:pointer;border:1px solid var(--color-divider);font-weight:800;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;padding:10px" style-hover="background:var(--color-neutral-200)">Connect</div>
+            </div>
+          </div>
+        </sc-for>
+        <div style="padding:20px 18px 30px;font-size:11px;line-height:1.6;color:var(--color-neutral-500)">Each week is saved on this device. Connected leagues refresh automatically when you open the app; the rest update from a screenshot or by hand.</div>
+      </div>
+    </sc-if>
+  </div>
+
+  <div style="flex:none;display:grid;grid-template-columns:1fr 1fr 1fr;border-top:2px solid var(--color-divider);background:var(--color-neutral-100);padding-bottom:26px">
+    <div onClick="{{ goGames }}" style="cursor:pointer;padding:14px 18px;border-right:1px solid var(--color-divider);font-weight:800;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:{{ tabGamesFg }}">By game</div>
+    <div onClick="{{ goLeagues }}" style="cursor:pointer;padding:14px 18px;border-right:1px solid var(--color-divider);font-weight:800;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:{{ tabLeagueFg }}">Leagues</div>
+    <div onClick="{{ openScan }}" style="cursor:pointer;padding:14px 18px;font-weight:800;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;background:var(--color-accent);color:var(--color-bg)">Scan</div>
+  </div>
+
+  <input type="file" accept="image/*" ref="{{ fileRef }}" onChange="{{ onFile }}" style="display:none">
+
+  <sc-if value="{{ editOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;z-index:80;background:var(--color-bg);display:flex;flex-direction:column;padding-top:54px">
+      <div style="flex:none;padding:8px 18px 12px;border-bottom:2px solid var(--color-divider)">
+        <div style="display:flex;align-items:baseline;gap:10px">
+          <div style="font-weight:800;font-size:28px;line-height:1;letter-spacing:-0.03em;text-transform:uppercase">{{ editName }}</div>
+          <div onClick="{{ closeEdit }}" style="margin-left:auto;cursor:pointer;font-weight:800;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent)">Done</div>
+        </div>
+        <div style="font-weight:600;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-neutral-600);margin-top:6px">{{ editMeta }}</div>
+      </div>
+      <div class="sc" style="flex:1;overflow-y:auto">
+        <div style="display:flex;border-bottom:2px solid var(--color-divider)">
+          <div onClick="{{ sideMine }}" style="flex:1;cursor:pointer;padding:11px 18px;font-weight:800;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;border-right:1px solid var(--color-divider);background:{{ sMineBg }};color:{{ sMineFg }}">Your starters</div>
+          <div onClick="{{ sideOpp }}" style="flex:1;cursor:pointer;padding:11px 18px;font-weight:800;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;background:{{ sOppBg }};color:{{ sOppFg }}">Opponent</div>
+        </div>
+        <sc-for list="{{ editPlayers }}" as="p" hint-placeholder-count="9">
+          <div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--color-neutral-300)">
+            <div style="flex:none;width:34px;font-weight:800;font-size:10px;letter-spacing:0.08em;color:var(--color-neutral-500)">{{ p.pos }}</div>
+            <div style="flex:1;font-weight:600;font-size:14px;line-height:1.2">{{ p.name }}</div>
+            <div style="flex:none;font-weight:600;font-size:10px;letter-spacing:0.08em;color:var(--color-neutral-500)">{{ p.team }}</div>
+            <div onClick="{{ p.remove }}" style="flex:none;cursor:pointer;font-weight:800;font-size:16px;line-height:1;color:var(--color-accent);padding:4px 2px 4px 10px">×</div>
+          </div>
+        </sc-for>
+        <div style="padding:16px 18px 30px">
+          <input value="{{ query }}" onInput="{{ onQuery }}" placeholder="Add a player by name" style="box-sizing:border-box;width:100%;min-height:44px;padding:10px 12px;font-family:var(--font-body);font-size:14px;color:var(--color-text);background:var(--color-neutral-100);border:1px solid var(--color-divider);border-radius:0;outline:none">
+          <sc-for list="{{ results }}" as="r" hint-placeholder-count="0">
+            <div onClick="{{ r.add }}" style="display:flex;gap:10px;cursor:pointer;padding:11px 12px;border:1px solid var(--color-neutral-300);border-top:none" style-hover="background:var(--color-neutral-200)">
+              <div style="flex:1;font-weight:600;font-size:13px">{{ r.name }}</div>
+              <div style="font-weight:600;font-size:10px;letter-spacing:0.08em;color:var(--color-neutral-600)">{{ r.meta }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ connOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;z-index:85;background:var(--color-bg);display:flex;flex-direction:column;padding-top:54px">
+      <div style="flex:none;padding:8px 18px 12px;border-bottom:2px solid var(--color-divider)">
+        <div style="display:flex;align-items:baseline;gap:10px">
+          <div style="font-weight:800;font-size:28px;line-height:1;letter-spacing:-0.03em;text-transform:uppercase">{{ connName }}</div>
+          <div onClick="{{ closeConn }}" style="margin-left:auto;cursor:pointer;font-weight:800;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent)">Done</div>
+        </div>
+        <div style="font-weight:600;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-neutral-600);margin-top:6px">Where this league's lineups come from</div>
+      </div>
+      <div class="sc" style="flex:1;overflow-y:auto">
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-bottom:2px solid var(--color-divider)">
+          <sc-for list="{{ srcOpts }}" as="o" hint-placeholder-count="3">
+            <div onClick="{{ o.pick }}" style="cursor:pointer;padding:13px 14px;font-weight:800;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;border-right:1px solid var(--color-divider);background:{{ o.bg }};color:{{ o.fg }}">{{ o.label }}</div>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ connManual }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:18px;font-size:12px;line-height:1.55;color:var(--color-neutral-700)">Update this league each week from a matchup screenshot or by editing players. Nothing is fetched automatically.</div>
+        </sc-if>
+
+        <sc-if value="{{ connSleeper }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:18px;display:flex;flex-direction:column;gap:14px">
+            <div>
+              <div style="font-weight:800;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:6px">Sleeper username</div>
+              <div style="display:flex;gap:6px">
+                <input value="{{ sleeperUser }}" onInput="{{ onSleeperUser }}" placeholder="username" autocapitalize="off" style="box-sizing:border-box;flex:1;min-width:0;min-height:44px;padding:10px 12px;font-family:var(--font-body);font-size:14px;color:var(--color-text);background:var(--color-neutral-100);border:1px solid var(--color-divider);border-radius:0;outline:none">
+                <div onClick="{{ findSleeper }}" style="flex:none;cursor:pointer;background:var(--color-text);color:var(--color-bg);font-weight:800;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;padding:15px 14px">Find leagues</div>
+              </div>
+            </div>
+            <div style="font-size:11px;color:{{ sleeperMsgColor }}">{{ sleeperMsg }}</div>
+            <sc-for list="{{ sleeperLeagues }}" as="s" hint-placeholder-count="0">
+              <div onClick="{{ s.pick }}" style="cursor:pointer;display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--color-divider);background:{{ s.bg }};color:{{ s.fg }}">
+                <div style="flex:1;font-weight:700;font-size:14px">{{ s.name }}</div>
+                <div style="font-weight:600;font-size:10px;letter-spacing:0.08em;text-transform:uppercase">{{ s.meta }}</div>
+              </div>
+            </sc-for>
+            <div style="font-size:11px;line-height:1.55;color:var(--color-neutral-600)">Sleeper's API is public and read-only — no password needed. Starters for both teams refresh every time you open the app.</div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ connEspn }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:18px;display:flex;flex-direction:column;gap:14px">
+            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+              <div>
+                <div style="font-weight:800;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:6px">League ID</div>
+                <input value="{{ espnLeague }}" onInput="{{ onEspnLeague }}" inputmode="numeric" placeholder="e.g. 1234567" style="box-sizing:border-box;width:100%;min-height:44px;padding:10px 12px;font-family:var(--font-body);font-size:14px;color:var(--color-text);background:var(--color-neutral-100);border:1px solid var(--color-divider);border-radius:0;outline:none">
+              </div>
+              <div>
+                <div style="font-weight:800;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:6px">Your team ID</div>
+                <input value="{{ espnTeam }}" onInput="{{ onEspnTeam }}" inputmode="numeric" placeholder="e.g. 4" style="box-sizing:border-box;width:100%;min-height:44px;padding:10px 12px;font-family:var(--font-body);font-size:14px;color:var(--color-text);background:var(--color-neutral-100);border:1px solid var(--color-divider);border-radius:0;outline:none">
+              </div>
+            </div>
+            <div onClick="{{ testEspn }}" style="cursor:pointer;background:var(--color-text);color:var(--color-bg);font-weight:800;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;padding:13px 14px">Test connection</div>
+            <div style="font-size:11px;color:{{ espnMsgColor }}">{{ espnMsg }}</div>
+            <div style="font-size:11px;line-height:1.55;color:var(--color-neutral-600)">Both IDs are in your team page URL on fantasy.espn.com, after "leagueId" and "teamId". ESPN only shares lineups for leagues set to public (League → Settings → "Make league viewable to public"). Private leagues fall back to screenshots.</div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ scanOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;z-index:90;background:var(--color-bg);display:flex;flex-direction:column;padding-top:54px">
+      <div style="flex:none;padding:8px 18px 12px;border-bottom:2px solid var(--color-divider)">
+        <div style="display:flex;align-items:baseline;gap:10px">
+          <div style="font-weight:800;font-size:28px;line-height:1;letter-spacing:-0.03em;text-transform:uppercase">Scan lineup</div>
+          <div onClick="{{ closeScan }}" style="margin-left:auto;cursor:pointer;font-weight:800;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent)">Cancel</div>
+        </div>
+        <div style="font-weight:600;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-neutral-600);margin-top:6px">{{ scanMeta }}</div>
+      </div>
+      <div class="sc" style="flex:1;overflow-y:auto">
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-bottom:2px solid var(--color-divider)">
+          <sc-for list="{{ scanLeagues }}" as="l" hint-placeholder-count="4">
+            <div onClick="{{ l.pick }}" style="cursor:pointer;padding:14px 18px;font-weight:800;font-size:13px;border-right:1px solid var(--color-divider);border-bottom:1px solid var(--color-divider);background:{{ l.bg }};color:{{ l.fg }}">{{ l.name }}</div>
+          </sc-for>
+        </div>
+        <sc-if value="{{ scanIdle }}" hint-placeholder-val="{{ true }}">
+          <div style="padding:18px">
+            <div onClick="{{ pickFile }}" style="cursor:pointer;border:2px dashed var(--color-divider);padding:34px 18px;background:var(--color-neutral-100)" style-hover="background:var(--color-neutral-200)">
+              <div style="font-weight:800;font-size:17px;letter-spacing:-0.01em">Choose a screenshot</div>
+              <div style="font-size:12px;color:var(--color-neutral-600);margin-top:6px;line-height:1.5">A matchup screen with both lineups visible, one league at a time.</div>
+            </div>
+            <div style="font-size:11px;line-height:1.6;color:var(--color-neutral-500);margin-top:16px">Both rosters are read and matched to the player list. You review the result before it replaces week {{ week }}.</div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ scanBusy }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:34px 18px">
+            <div style="font-weight:800;font-size:19px;animation:ffpulse 1.3s infinite">Reading the screenshot…</div>
+            <div style="font-size:12px;color:var(--color-neutral-600);margin-top:8px">{{ scanFileName }}</div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ scanError }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:22px 18px">
+            <div style="font-weight:800;font-size:17px;color:var(--color-accent-700)">Couldn't read that one</div>
+            <div style="font-size:12px;color:var(--color-neutral-600);margin-top:8px;line-height:1.5">{{ scanErrorMsg }}</div>
+            <div onClick="{{ pickFile }}" style="cursor:pointer;margin-top:16px;border:1px solid var(--color-divider);font-weight:800;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;padding:13px 14px">Try another screenshot</div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ scanReview }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <div style="padding:14px 18px 10px;font-size:11px;line-height:1.5;color:var(--color-neutral-600)">Tap the side tag to move a player between teams, × to drop a misread.</div>
+            <sc-for list="{{ reviewRows }}" as="r" hint-placeholder-count="0">
+              <div style="display:flex;align-items:center;gap:8px;padding:10px 18px;border-bottom:1px solid var(--color-neutral-300)">
+                <div style="flex:none;width:30px;font-weight:800;font-size:10px;letter-spacing:0.08em;color:var(--color-neutral-500)">{{ r.pos }}</div>
+                <div style="flex:1;min-width:0">
+                  <div style="font-weight:600;font-size:14px;line-height:1.2">{{ r.name }}</div>
+                  <div style="font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--color-neutral-500);margin-top:2px">{{ r.note }}</div>
+                </div>
+                <div onClick="{{ r.flip }}" style="flex:none;cursor:pointer;font-weight:800;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;padding:6px 8px;background:{{ r.sideBg }};color:{{ r.sideFg }}">{{ r.sideLabel }}</div>
+                <div onClick="{{ r.drop }}" style="flex:none;cursor:pointer;font-weight:800;font-size:16px;line-height:1;color:var(--color-accent);padding:4px 0 4px 6px">×</div>
+              </div>
+            </sc-for>
+            <div style="padding:18px;display:flex;flex-direction:column;gap:8px">
+              <div onClick="{{ commit }}" style="cursor:pointer;background:var(--color-accent);color:var(--color-bg);font-weight:800;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;padding:14px" style-hover="background:var(--color-accent-600)">{{ commitLabel }}</div>
+              <div onClick="{{ pickFile }}" style="cursor:pointer;border:1px solid var(--color-divider);font-weight:800;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;padding:13px 14px">Use a different screenshot</div>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;left:18px;right:18px;bottom:96px;z-index:120;background:var(--color-text);color:var(--color-bg);padding:13px 14px;font-weight:600;font-size:12px">{{ toast }}</div>
+  </sc-if>
+</div>
+</x-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const LS = 'ff-tracker-v3';
+const LS_PL = 'ff-sleeper-players';
+const SEASON = 2026;
+const DEFAULT_USER = 'Uncutgems82';
+const DEFAULT_CONN = {
+  RDL: { source: 'sleeper' },
+  DFL: { source: 'sleeper' },
+  Deloitte: { source: 'espn', leagueId: '308619009', teamId: '1' }
+};
+const ESPN_POS = { 1: 'QB', 2: 'RB', 3: 'WR', 4: 'TE', 5: 'K', 16: 'DEF' };
+const ESPN_TEAM = { 1:'ATL',2:'BUF',3:'CHI',4:'CIN',5:'CLE',6:'DAL',7:'DEN',8:'DET',9:'GB',10:'TEN',11:'IND',12:'KC',13:'LV',14:'LA',15:'MIA',16:'MIN',17:'NE',18:'NO',19:'NYG',20:'NYJ',21:'PHI',22:'ARI',23:'PIT',24:'LAC',25:'SF',26:'SEA',27:'TB',28:'WAS',29:'CAR',30:'JAX',33:'BAL',34:'HOU' };
+const NICK = { ARI:'Cardinals',ATL:'Falcons',BAL:'Ravens',BUF:'Bills',CAR:'Panthers',CHI:'Bears',CIN:'Bengals',CLE:'Browns',DAL:'Cowboys',DEN:'Broncos',DET:'Lions',GB:'Packers',HOU:'Texans',IND:'Colts',JAX:'Jaguars',KC:'Chiefs',LA:'Rams',LAC:'Chargers',LV:'Raiders',MIA:'Dolphins',MIN:'Vikings',NE:'Patriots',NO:'Saints',NYG:'Giants',NYJ:'Jets',PHI:'Eagles',PIT:'Steelers',SEA:'Seahawks',SF:'49ers',TB:'Buccaneers',TEN:'Titans',WAS:'Commanders' };
+
+class Component extends DCLogic {
+  fileRef = React.createRef();
+  state = {
+    ready: false, screen: 'games', week: 1, data: {}, scored: {}, conn: {}, sleeperUser: '', synced: {},
+    filter: 'all', edit: null, side: 'mine', query: '', connFor: null,
+    sleeperList: null, sleeperMsg: '', espnMsg: '', syncing: false, scan: null, toast: ''
+  };
+
+  componentDidMount() {
+    new Promise((res, rej) => {
+      let n = 0;
+      const tick = () => window.FF_DATA ? res(window.FF_DATA) : (++n > 150 ? rej(new Error('data file did not load')) : setTimeout(tick, 100));
+      tick();
+    }).then(m => {
+      this.D = m;
+      let s = null;
+      try { s = JSON.parse(localStorage.getItem(LS) || 'null'); } catch (e) {}
+      const week = this.currentWeek();
+      const data = (s && s.data) || {};
+      if (!data[week]) data[week] = this.seedWeek(week, data);
+      this.setState({
+        ready: true, week, data, scored: (s && s.scored) || {}, conn: this.mergeConn((s && s.conn) || {}),
+        sleeperUser: (s && s.sleeperUser) || DEFAULT_USER, synced: (s && s.synced) || {}
+      }, () => { this.save(); this.syncAll(true); });
+    }).catch(err => this.setState({ loadError: 'Couldn\'t load the player and schedule data (' + (err && err.message || err) + '). Reopen the app from the project.' }));
+  }
+
+  save = () => {
+    const { week, data, scored, conn, sleeperUser, synced } = this.state;
+    try { localStorage.setItem(LS, JSON.stringify({ week, data, scored, conn, sleeperUser, synced })); } catch (e) {}
+  };
+
+  mergeConn(saved) {
+    const out = {};
+    Object.keys(DEFAULT_CONN).forEach(n => {
+      const s = saved[n];
+      out[n] = s && s.source !== 'manual' && (s.leagueId || s.source === 'sleeper') ? s : Object.assign({}, DEFAULT_CONN[n]);
+    });
+    return out;
+  }
+
+  async resolveSleeperLeague(league, c) {
+    if (c.leagueId) return c.leagueId;
+    const uid = await this.sleeperUserId();
+    const list = (await this.sj('user/' + uid + '/leagues/nfl/' + SEASON)) || [];
+    const key = league.toLowerCase();
+    const initials = s => s.split(/[^a-z0-9]+/i).filter(Boolean).map(w => w[0]).join('').toLowerCase();
+    const hits = list.filter(l => {
+      const nm = String(l.name || '').toLowerCase();
+      return nm.indexOf(key) > -1 || initials(nm) === key;
+    });
+    if (hits.length !== 1) throw new Error('Couldn\'t match ' + league + ' to a Sleeper league. Tap Connect and pick it once.');
+    this.setConn(league, { leagueId: hits[0].league_id, name: hits[0].name });
+    return hits[0].league_id;
+  }
+
+  currentWeek() {
+    const now = Date.now();
+    for (let w = 1; w <= 18; w++) {
+      const g = this.D.SCHEDULE_ALL.filter(x => x.w === w);
+      const last = Math.max.apply(null, g.map(x => new Date(x.t).getTime()));
+      if (now < last + 8 * 3600000) return w;
+    }
+    return 18;
+  }
+
+  norm(t) { const u = String(t || '').toUpperCase().trim(); return this.D.TEAM_ALIASES[u] || u; }
+  mk(p) {
+    return { id: 'p' + Math.random().toString(36).slice(2, 9), name: p.n || p.name || '', pos: String(p.p || p.pos || '').toUpperCase(), team: this.norm(p.t || p.team) };
+  }
+
+  seedWeek(w, data) {
+    const out = {};
+    const prev = data && data[w - 1];
+    this.D.LEAGUE_NAMES.forEach(n => {
+      if (w === 1 && this.D.WEEK1[n]) out[n] = { mine: this.D.WEEK1[n].mine.map(x => this.mk(x)), opp: this.D.WEEK1[n].opp.map(x => this.mk(x)) };
+      else if (prev && prev[n]) out[n] = { mine: prev[n].mine.map(x => this.mk(x)), opp: [] };
+      else out[n] = { mine: (this.D.BASELINE_ROSTERS[n] || []).map(x => this.mk(x)), opp: [] };
+    });
+    return out;
+  }
+
+  setLeague(week, league, lineup, how) {
+    const data = JSON.parse(JSON.stringify(this.state.data));
+    if (!data[week]) data[week] = this.seedWeek(week, data);
+    data[week][league] = { mine: lineup.mine.map(x => this.mk(x)), opp: lineup.opp.map(x => this.mk(x)), how: how, at: Date.now() };
+    this.setState({ data }, this.save);
+  }
+
+  mutate(fn) {
+    const data = JSON.parse(JSON.stringify(this.state.data));
+    const w = this.state.week;
+    if (!data[w]) data[w] = this.seedWeek(w, data);
+    fn(data[w]);
+    this.setState({ data }, this.save);
+  }
+
+  setWeek = (w) => {
+    const data = Object.assign({}, this.state.data);
+    if (!data[w]) data[w] = this.seedWeek(w, data);
+    this.setState({ week: w, data }, () => { this.save(); this.syncAll(true); });
+  };
+
+  flash(msg) {
+    this.setState({ toast: msg });
+    clearTimeout(this._t);
+    this._t = setTimeout(() => this.setState({ toast: '' }), 2600);
+  }
+
+  setConn(league, patch) {
+    const conn = Object.assign({}, this.state.conn);
+    conn[league] = Object.assign({ source: 'manual' }, conn[league] || {}, patch);
+    this.setState({ conn }, this.save);
+  }
+
+  // ── Sleeper ─────────────────────────────────────────────
+  async sj(path) {
+    const r = await fetch('https://api.sleeper.app/v1/' + path);
+    if (!r.ok) throw new Error('Sleeper ' + r.status);
+    return r.json();
+  }
+
+  async sleeperUserId() {
+    const u = this.state.sleeperUser.trim();
+    if (!u) throw new Error('Add your Sleeper username first.');
+    if (this._suid && this._suidFor === u) return this._suid;
+    const user = await this.sj('user/' + encodeURIComponent(u));
+    if (!user || !user.user_id) throw new Error('No Sleeper user named "' + u + '".');
+    this._suid = user.user_id; this._suidFor = u;
+    return user.user_id;
+  }
+
+  findSleeper = async () => {
+    this.setState({ sleeperMsg: 'Looking up leagues…', sleeperList: null });
+    try {
+      const uid = await this.sleeperUserId();
+      const list = await this.sj('user/' + uid + '/leagues/nfl/' + SEASON);
+      this.save();
+      this.setState({ sleeperList: list || [], sleeperMsg: (list && list.length) ? 'Tap the league that matches ' + this.state.connFor + '.' : 'No ' + SEASON + ' leagues on that account.' });
+    } catch (e) { this.setState({ sleeperMsg: e.message }); }
+  };
+
+  async sleeperPlayers(ids) {
+    let cache = {};
+    try { cache = JSON.parse(localStorage.getItem(LS_PL) || '{}'); } catch (e) {}
+    const missing = ids.filter(id => !cache[id] && !/^[A-Z]{2,3}$/.test(id));
+    if (missing.length) {
+      const all = this._allPl || (this._allPl = await this.sj('players/nfl'));
+      ids.forEach(id => {
+        const p = all[id];
+        if (p) cache[id] = { n: ((p.first_name || '') + ' ' + (p.last_name || '')).trim(), p: p.position, t: p.team };
+      });
+      try { localStorage.setItem(LS_PL, JSON.stringify(cache)); } catch (e) {}
+    }
+    return ids.filter(id => id && id !== '0').map(id => {
+      if (/^[A-Z]{2,3}$/.test(id)) { const t = this.norm(id); return { n: (NICK[t] || t) + ' D/ST', p: 'DEF', t: t }; }
+      return cache[id] ? { n: cache[id].n, p: cache[id].p === 'DEF' ? 'DEF' : cache[id].p, t: cache[id].t } : { n: 'Player ' + id, p: '', t: '' };
+    });
+  }
+
+  async syncSleeper(league, c, week) {
+    const uid = await this.sleeperUserId();
+    c = Object.assign({}, c, { leagueId: await this.resolveSleeperLeague(league, c) });
+    const rosters = await this.sj('league/' + c.leagueId + '/rosters');
+    const mine = rosters.filter(r => r.owner_id === uid || (r.co_owners || []).indexOf(uid) > -1)[0];
+    if (!mine) throw new Error('Your team isn\'t in that Sleeper league.');
+    const ms = await this.sj('league/' + c.leagueId + '/matchups/' + week);
+    const me = (ms || []).filter(m => m.roster_id === mine.roster_id)[0];
+    if (!me) throw new Error('No week ' + week + ' matchup yet.');
+    const opp = ms.filter(m => m.matchup_id === me.matchup_id && m.roster_id !== me.roster_id)[0];
+    const myIds = (me.starters && me.starters.length ? me.starters : mine.starters) || [];
+    const opIds = (opp && opp.starters) || [];
+    const players = await this.sleeperPlayers(myIds.concat(opIds));
+    return { mine: players.slice(0, myIds.filter(i => i && i !== '0').length), opp: players.slice(myIds.filter(i => i && i !== '0').length) };
+  }
+
+  // ── ESPN ────────────────────────────────────────────────
+  async syncEspn(league, c, week) {
+    const url = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/' + SEASON + '/segments/0/leagues/' + c.leagueId +
+      '?view=mMatchup&view=mMatchupScore&scoringPeriodId=' + week;
+    let j;
+    try {
+      const r = await fetch(url, { credentials: 'omit' });
+      if (r.status === 401 || r.status === 403) throw new Error('private');
+      if (!r.ok) throw new Error('ESPN ' + r.status);
+      j = await r.json();
+    } catch (e) {
+      throw new Error(e.message === 'private' || e.name === 'TypeError'
+        ? 'ESPN blocked the request. The league must be set to public, otherwise use a screenshot.'
+        : e.message);
+    }
+    const tid = Number(c.teamId);
+    const g = (j.schedule || []).filter(s => s.matchupPeriodId === week && ((s.home && s.home.teamId === tid) || (s.away && s.away.teamId === tid)))[0];
+    if (!g) throw new Error('No week ' + week + ' matchup for team ' + c.teamId + '.');
+    const meSide = g.home.teamId === tid ? g.home : g.away;
+    const opSide = g.home.teamId === tid ? g.away : g.home;
+    const conv = side => ((side && side.rosterForCurrentScoringPeriod && side.rosterForCurrentScoringPeriod.entries) || [])
+      .filter(e => e.lineupSlotId !== 20 && e.lineupSlotId !== 21)
+      .map(e => {
+        const p = (e.playerPoolEntry && e.playerPoolEntry.player) || {};
+        const pos = ESPN_POS[p.defaultPositionId] || '';
+        const t = ESPN_TEAM[p.proTeamId] || '';
+        return { n: pos === 'DEF' ? (NICK[t] || t) + ' D/ST' : p.fullName, p: pos, t: t };
+      });
+    const res = { mine: conv(meSide), opp: conv(opSide) };
+    if (!res.mine.length) throw new Error('ESPN returned no lineup yet for week ' + week + '.');
+    return res;
+  }
+
+  testEspn = async () => {
+    const lg = this.state.connFor;
+    const c = this.state.conn[lg] || {};
+    if (!c.leagueId || !c.teamId) { this.setState({ espnMsg: 'Enter both IDs.' }); return; }
+    this.setState({ espnMsg: 'Connecting…' });
+    try {
+      const res = await this.syncEspn(lg, c, this.state.week);
+      this.setLeague(this.state.week, lg, res, 'espn');
+      this.setState({ espnMsg: 'Connected — pulled ' + res.mine.length + ' + ' + res.opp.length + ' starters.' });
+    } catch (e) { this.setState({ espnMsg: e.message }); }
+  };
+
+  syncAll = async (auto) => {
+    if (!this.D || this.state.syncing) return;
+    const week = this.state.week;
+    const targets = this.D.LEAGUE_NAMES.filter(n => {
+      const c = this.state.conn[n];
+      if (!c || c.source === 'manual' || (!c.leagueId && c.source !== 'sleeper')) return false;
+      if (auto === true) { const s = this.state.synced[n + ':' + week]; return !s || Date.now() - s.at > 15 * 60000; }
+      return true;
+    });
+    if (!targets.length) { if (auto !== true) this.flash('No connected leagues yet — tap Connect on a league.'); return; }
+    this.setState({ syncing: true });
+    const synced = Object.assign({}, this.state.synced);
+    let ok = 0;
+    for (const n of targets) {
+      const c = this.state.conn[n];
+      try {
+        const res = c.source === 'sleeper' ? await this.syncSleeper(n, c, week) : await this.syncEspn(n, c, week);
+        this.setLeague(week, n, res, c.source);
+        synced[n + ':' + week] = { at: Date.now(), ok: true };
+        ok++;
+      } catch (e) { synced[n + ':' + week] = { at: Date.now(), ok: false, err: e.message }; }
+    }
+    this.setState({ syncing: false, synced }, this.save);
+    if (auto !== true || ok < targets.length) this.flash('Synced ' + ok + ' of ' + targets.length + ' connected leagues');
+  };
+
+  // ── Screenshot scan ─────────────────────────────────────
+  pickFile = () => { const el = this.fileRef.current; if (el) { el.value = ''; el.click(); } };
+
+  onFile = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const scan = Object.assign({}, this.state.scan || { league: this.D.LEAGUE_NAMES[0] }, { status: 'busy', fileName: f.name });
+    this.setState({ scan });
+    const reader = new FileReader();
+    reader.onload = () => this.analyze(String(reader.result), f.type || 'image/png');
+    reader.readAsDataURL(f);
+  };
+
+  async analyze(dataUrl, mediaType) {
+    const prompt = 'This is a screenshot of a fantasy football matchup (Sleeper, ESPN or similar). Read both STARTING lineups. ' +
+      'Return ONLY JSON: {"mine":[{"name":"","pos":"","team":""}],"opp":[...]}. "mine" is the left or "my team" side, "opp" the opponent. ' +
+      'pos: QB,RB,WR,TE,K,DEF. team: NFL abbreviation. Defenses named like "Steelers D/ST". Skip bench players.';
+    try {
+      const raw = await window.claude.complete({
+        messages: [{ role: 'user', content: [
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data: dataUrl.split(',')[1] } },
+          { type: 'text', text: prompt }
+        ] }]
+      });
+      const m = String(raw).match(/\{[\s\S]*\}/);
+      const parsed = JSON.parse(m[0]);
+      const rows = [].concat((parsed.mine || []).map(p => this.reviewRow(p, 'mine')), (parsed.opp || []).map(p => this.reviewRow(p, 'opp')));
+      if (!rows.length) throw new Error('empty');
+      this.setState({ scan: Object.assign({}, this.state.scan, { status: 'review', rows }) });
+    } catch (err) {
+      this.setState({ scan: Object.assign({}, this.state.scan, { status: 'error', error: 'No lineup found in that image. Try a tighter crop of the matchup screen, or edit the players by hand.' }) });
+    }
+  }
+
+  reviewRow(p, side) {
+    const name = String(p.name || '').trim(), lc = name.toLowerCase();
+    const k = this.D.PLAYERS.filter(x => x.n.toLowerCase() === lc)[0] || this.D.PLAYERS.filter(x => lc && x.n.toLowerCase().indexOf(lc) === 0)[0];
+    return { id: 'r' + Math.random().toString(36).slice(2, 9), name: k ? k.n : name, pos: k ? k.p : String(p.pos || '').toUpperCase(), team: k ? k.t : this.norm(p.team), matched: !!k, side };
+  }
+
+  commit = () => {
+    const s = this.state.scan;
+    if (!s || !s.rows) return;
+    this.setLeague(this.state.week, s.league, { mine: s.rows.filter(r => r.side === 'mine'), opp: s.rows.filter(r => r.side === 'opp') }, 'scan');
+    this.setState({ scan: null });
+    this.flash(s.league + ' · week ' + this.state.week + ' saved');
+  };
+
+  renderVals() {
+    const st = this.state, D = this.D;
+    const ink = 'var(--color-text)', red = 'var(--color-accent)', bg = 'var(--color-bg)', mute = 'var(--color-neutral-500)';
+    const base = {
+      fileRef: this.fileRef, toast: st.toast, week: st.week, weekChips: [], games: [], leagueRows: [],
+      screenTitle: st.screen === 'games' ? 'Week ' + st.week : 'Leagues',
+      syncLabel: st.syncing ? 'Syncing…' : 'Sync', syncColor: st.syncing ? mute : red, syncAll: () => this.syncAll(false),
+      isGames: st.screen === 'games', isLeagues: st.screen === 'leagues',
+      tabGamesFg: st.screen === 'games' ? red : ink, tabLeagueFg: st.screen === 'leagues' ? red : ink,
+      goGames: () => this.setState({ screen: 'games' }), goLeagues: () => this.setState({ screen: 'leagues' }),
+      openScan: () => this.setState({ scan: { league: D ? D.LEAGUE_NAMES[0] : '', status: 'idle' } }),
+      closeScan: () => this.setState({ scan: null }), pickFile: this.pickFile, onFile: this.onFile, commit: this.commit,
+      editOpen: false, connOpen: false, scanOpen: false
+    };
+    base.gamesFoot = st.loadError || 'Loading lineups…';
+    if (!st.ready) return base;
+    const week = st.week, wk = st.data[week] || {};
+
+    for (let w = 1; w <= 18; w++) base.weekChips.push({ label: 'W' + w, color: w === week ? ink : mute, line: w === week ? red : 'transparent', go: () => this.setWeek(w) });
+
+    const wg = D.SCHEDULE_ALL.filter(g => g.w === week);
+    const idx = {}; wg.forEach((g, i) => { idx[g.h] = i; idx[g.a] = i; });
+    const buckets = wg.map(() => ({ f: {}, a: {} })), bye = { f: {}, a: {} };
+    const put = (side, p, lg) => {
+      const b = idx[p.team] === undefined ? bye : buckets[idx[p.team]];
+      const key = p.team + '|' + p.name.toLowerCase();
+      if (!b[side][key]) b[side][key] = { name: p.name, pos: p.pos, team: p.team, leagues: [], uid: side + ':' + key };
+      if (b[side][key].leagues.indexOf(lg) < 0) b[side][key].leagues.push(lg);
+    };
+    D.LEAGUE_NAMES.forEach(n => { const l = wk[n] || { mine: [], opp: [] }; l.mine.forEach(p => put('f', p, n)); l.opp.forEach(p => put('a', p, n)); });
+    const scored = st.scored[week] || {};
+    const line = (p) => ({
+      label: p.name + (p.leagues.length > 1 ? '  ×' + p.leagues.length : ''),
+      meta: [p.pos, p.team, p.leagues.join(' · ')].filter(Boolean).join(' · '),
+      color: scored[p.uid] ? mute : ink, deco: scored[p.uid] ? 'line-through' : 'none',
+      toggle: () => { const all = Object.assign({}, st.scored); const ws = Object.assign({}, all[week] || {}); ws[p.uid] = !ws[p.uid]; all[week] = ws; this.setState({ scored: all }, this.save); }
+    });
+    let sf = 0, sa = 0;
+    const now = Date.now();
+    const mkGame = (title, time, badge, live, f, a) => ({
+      title, time, badge, badgeBg: live ? red : 'var(--color-neutral-200)', badgeFg: live ? bg : 'var(--color-neutral-700)',
+      forList: f.map(line), againstList: a.map(line), forEmpty: f.length ? '' : '—', againstEmpty: a.length ? '' : '—'
+    });
+    wg.forEach((g, i) => {
+      const f = Object.values(buckets[i].f), a = Object.values(buckets[i].a);
+      if (!f.length && !a.length) return;
+      if (st.filter === 'mine' && !f.length) return;
+      sf += f.length; sa += a.length;
+      const t = new Date(g.t).getTime();
+      const s = now < t ? 'Upcoming' : now < t + 3.5 * 3600000 ? 'Live' : 'Final';
+      base.games.push(mkGame(g.a + ' @ ' + g.h, g.d, s, s === 'Live', f, a));
+    });
+    const bf = Object.values(bye.f), ba = Object.values(bye.a);
+    if ((bf.length || ba.length) && st.filter === 'all') base.games.push(mkGame('Bye or unmatched', 'No game found for these teams in week ' + week, 'Check', false, bf, ba));
+
+    const conns = D.LEAGUE_NAMES.map(n => st.conn[n]).filter(c => c && c.source !== 'manual');
+    Object.assign(base, {
+      statGames: base.games.length, statFor: sf, statAgainst: sa,
+      gamesFoot: base.games.length ? 'Tap a player to cross them off once they\'ve played.' : 'No lineups for week ' + week + ' yet. Connect a league or scan a screenshot.',
+      fAllBg: st.filter === 'all' ? ink : 'transparent', fAllFg: st.filter === 'all' ? bg : ink,
+      fMineBg: st.filter === 'mine' ? ink : 'transparent', fMineFg: st.filter === 'mine' ? bg : ink,
+      filterAll: () => this.setState({ filter: 'all' }), filterMine: () => this.setState({ filter: 'mine' })
+    });
+
+    const srcName = { sleeper: 'Sleeper', espn: 'ESPN', manual: 'Manual' };
+    base.leagueRows = D.LEAGUE_NAMES.map(n => {
+      const l = wk[n] || { mine: [], opp: [] };
+      const c = st.conn[n] || { source: 'manual' };
+      const sy = st.synced[n + ':' + week];
+      const linked = c.source !== 'manual' && (c.leagueId || c.source === 'sleeper');
+      let status = l.how === 'scan' ? 'From screenshot' : l.how ? 'Pulled from ' + srcName[l.how] : 'Carried over — not updated for week ' + week;
+      if (l.at) status += ' · ' + new Date(l.at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+      let statusColor = 'var(--color-neutral-600)';
+      if (sy && !sy.ok) { status = sy.err; statusColor = 'var(--color-accent-700)'; }
+      return {
+        name: n, counts: l.mine.length + ' v ' + l.opp.length,
+        src: linked ? srcName[c.source] : 'Manual', srcBg: linked ? red : 'var(--color-neutral-200)', srcFg: linked ? bg : 'var(--color-neutral-700)',
+        status, statusColor,
+        primaryLabel: linked ? 'Sync' : 'Scan',
+        primary: linked ? async () => {
+          try { const res = c.source === 'sleeper' ? await this.syncSleeper(n, c, week) : await this.syncEspn(n, c, week); this.setLeague(week, n, res, c.source); const s2 = Object.assign({}, this.state.synced); s2[n + ':' + week] = { at: Date.now(), ok: true }; this.setState({ synced: s2 }, this.save); this.flash(n + ' synced'); }
+          catch (e) { const s2 = Object.assign({}, this.state.synced); s2[n + ':' + week] = { at: Date.now(), ok: false, err: e.message }; this.setState({ synced: s2 }, this.save); }
+        } : () => this.setState({ scan: { league: n, status: 'idle' } }),
+        edit: () => this.setState({ edit: n, side: 'mine', query: '' }),
+        connect: () => this.setState({ connFor: n, sleeperMsg: '', espnMsg: '', sleeperList: null })
+      };
+    });
+
+    if (st.edit) {
+      const l = wk[st.edit] || { mine: [], opp: [] };
+      const list = l[st.side] || [];
+      const q = st.query.trim().toLowerCase();
+      const results = q.length < 2 ? [] : D.PLAYERS.filter(p => p.n.toLowerCase().indexOf(q) > -1).slice(0, 6).map(p => ({
+        name: p.n, meta: p.p + ' · ' + p.t,
+        add: () => { this.mutate(w => { w[st.edit][st.side].push(this.mk(p)); w[st.edit].how = 'manual'; w[st.edit].at = Date.now(); }); this.setState({ query: '' }); }
+      }));
+      Object.assign(base, {
+        editOpen: true, editName: st.edit, editMeta: 'Week ' + week + ' · ' + list.length + ' players',
+        closeEdit: () => this.setState({ edit: null }),
+        sideMine: () => this.setState({ side: 'mine' }), sideOpp: () => this.setState({ side: 'opp' }),
+        sMineBg: st.side === 'mine' ? ink : 'transparent', sMineFg: st.side === 'mine' ? bg : ink,
+        sOppBg: st.side === 'opp' ? red : 'transparent', sOppFg: st.side === 'opp' ? bg : ink,
+        editPlayers: list.map(p => ({ pos: p.pos, name: p.name, team: p.team, remove: () => this.mutate(w => { w[st.edit][st.side] = w[st.edit][st.side].filter(x => x.id !== p.id); }) })),
+        query: st.query, onQuery: e => this.setState({ query: e.target.value }), results
+      });
+    }
+
+    if (st.connFor) {
+      const n = st.connFor, c = st.conn[n] || { source: 'manual' };
+      Object.assign(base, {
+        connOpen: true, connName: n, closeConn: () => { this.setState({ connFor: null }); this.syncAll(true); },
+        srcOpts: [['manual', 'Screenshot'], ['sleeper', 'Sleeper'], ['espn', 'ESPN']].map(o => ({
+          label: o[1], bg: c.source === o[0] ? ink : 'transparent', fg: c.source === o[0] ? bg : ink,
+          pick: () => this.setConn(n, { source: o[0], leagueId: o[0] === c.source ? c.leagueId : '', teamId: o[0] === c.source ? c.teamId : '' })
+        })),
+        connManual: c.source === 'manual', connSleeper: c.source === 'sleeper', connEspn: c.source === 'espn',
+        sleeperUser: st.sleeperUser, onSleeperUser: e => this.setState({ sleeperUser: e.target.value }, this.save),
+        findSleeper: this.findSleeper,
+        sleeperMsg: st.sleeperMsg || (c.leagueId ? 'Linked to Sleeper league ' + c.leagueId + '.' : ''),
+        sleeperMsgColor: 'var(--color-neutral-700)',
+        sleeperLeagues: (st.sleeperList || []).map(s => ({
+          name: s.name, meta: (s.total_rosters || '') + ' teams',
+          bg: c.leagueId === s.league_id ? ink : 'transparent', fg: c.leagueId === s.league_id ? bg : ink,
+          pick: () => { this.setConn(n, { leagueId: s.league_id, name: s.name }); this.setState({ sleeperMsg: 'Linked to ' + s.name + '.' }); }
+        })),
+        espnLeague: c.leagueId || '', espnTeam: c.teamId || '',
+        onEspnLeague: e => this.setConn(n, { leagueId: e.target.value.replace(/\D/g, '') }),
+        onEspnTeam: e => this.setConn(n, { teamId: e.target.value.replace(/\D/g, '') }),
+        testEspn: this.testEspn, espnMsg: st.espnMsg,
+        espnMsgColor: /^Connected/.test(st.espnMsg) ? 'var(--color-text)' : 'var(--color-accent-700)'
+      });
+    }
+
+    if (st.scan) {
+      const s = st.scan;
+      Object.assign(base, {
+        scanOpen: true, scanMeta: 'Week ' + week + ' · ' + s.league,
+        scanLeagues: D.LEAGUE_NAMES.map(n => ({ name: n, bg: s.league === n ? ink : 'transparent', fg: s.league === n ? bg : ink, pick: () => this.setState({ scan: Object.assign({}, this.state.scan, { league: n }) }) })),
+        scanIdle: s.status === 'idle', scanBusy: s.status === 'busy', scanError: s.status === 'error', scanReview: s.status === 'review',
+        scanFileName: s.fileName || '', scanErrorMsg: s.error || '',
+        commitLabel: 'Save to ' + s.league + ' · week ' + week,
+        reviewRows: (s.rows || []).map(r => ({
+          pos: r.pos, name: r.name, note: r.matched ? r.team : (r.team || '') + ' · not in player list',
+          sideLabel: r.side === 'mine' ? 'Mine' : 'Opp', sideBg: r.side === 'mine' ? ink : red, sideFg: bg,
+          flip: () => this.setState({ scan: Object.assign({}, s, { rows: s.rows.map(x => x.id === r.id ? Object.assign({}, x, { side: x.side === 'mine' ? 'opp' : 'mine' }) : x) }) }),
+          drop: () => this.setState({ scan: Object.assign({}, s, { rows: s.rows.filter(x => x.id !== r.id) }) })
+        }))
+      });
+    }
+    return base;
+  }
+}
+</script>
+</body>
+</html>
