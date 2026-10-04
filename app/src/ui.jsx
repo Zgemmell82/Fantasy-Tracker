@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
+import { LEAGUE_COLORS } from './lib/account.js';
 
 // ── Icons (Lucide-style strokes) ─────────────────────────
 const I = ({ d, size = 20, sw = 2, children }) => (
@@ -44,8 +45,7 @@ export function PosChip({ pos }) {
   return <span className="pos" style={{ '--pc': posColor(pos) }}>{pos === 'DEF' ? 'DEF' : pos || '—'}</span>;
 }
 
-// The first six are the original league colours; the rest are extra choices for added leagues.
-export const LEAGUE_COLORS = ['#8b7cff', '#ffc043', '#35d49a', '#4fb6ff', '#ff7a59', '#ff5ca8', '#2fe0b0', '#c38bff', '#ff4d5e', '#a3e635', '#f472b6', '#94a3b8'];
+export { LEAGUE_COLORS };
 export const leagueColor = (name, all) => LEAGUE_COLORS[Math.max(0, all.indexOf(name)) % LEAGUE_COLORS.length];
 
 // Each league's chosen colour, provided by App so tags and dots anywhere can look it up by name.

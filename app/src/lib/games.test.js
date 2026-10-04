@@ -28,9 +28,9 @@ test('current week follows the schedule', () => {
 });
 
 test('a new week carries over my starters but not the opponent', () => {
-  const w1 = seedWeek(1, {});
+  const w1 = seedWeek(1, {}, undefined, true);
   assert.ok(w1.RDL.opp.length > 0);
-  const w2 = seedWeek(2, { 1: w1 });
+  const w2 = seedWeek(2, { 1: w1 }, undefined, true);
   assert.equal(w2.RDL.mine.length, w1.RDL.mine.length);
   assert.equal(w2.RDL.opp.length, 0);
   assert.equal(w2.Breezewood.mine.length, w1.Breezewood.mine.length);

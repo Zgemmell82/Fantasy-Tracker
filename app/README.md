@@ -4,6 +4,20 @@ This is a copy of the original tracker (`Fantasy-Tracker-1`) with its own GitHub
 
 A phone web app that lists your fantasy starters, and your opponents', grouped by NFL game for the week. It's built from the Claude Design handoff in `../project/Fantasy Tracker.dc.html` and uses the Modernist design system.
 
+## Accounts and sign-in
+
+Everyone makes an account (email and password) and gets their own dashboard with their own leagues. Signing in once keeps you signed in on that device until you tap **Sign out** (bottom of the Leagues tab). Leagues are saved to the account, so another phone or computer shows the same leagues after signing in. A new account starts empty; the leagues from the original tracker can be imported once from the Leagues tab on the device that has them.
+
+Accounts use [Supabase](https://supabase.com) (free tier). One-time setup:
+
+1. Create a project at supabase.com.
+2. **SQL Editor → New query**, paste the contents of `supabase/schema.sql`, **Run**. This creates the table that holds each account's leagues and locks it so people only see their own.
+3. **Authentication → URL Configuration**: set **Site URL** to the app's address (`https://zgemmell82.github.io/fantasy-tracker/`). Under **Authentication → Providers → Email** you can turn **Confirm email** off if you don't want a confirmation step.
+4. **Project Settings → API**: copy the **Project URL** and the **anon public** key. (The anon key is meant to be public; the table's row-level security is what protects each account's data. Never use the `service_role` key here.)
+5. In the GitHub repository: **Settings → Secrets and variables → Actions → Variables → New repository variable**, add `SUPABASE_URL` and `SUPABASE_ANON_KEY`, then run the **Deploy app to GitHub Pages** workflow again.
+
+For local work, put the same two values in `app/.env.local` as `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+
 ## Run it
 
 ```sh
@@ -18,14 +32,16 @@ npm run build    # production build in dist/
 ## How it works
 
 - **By game** groups every league's starters by NFL game. A player you start in several leagues shows `×2`, `×3` and so on. Tap a player to cross them off.
-- **Plays** lists the games with your or your opponents' starters, live first, with ESPN's live score and clock. Tap one to drop down its play-by-play: **All**, **Players** (plays involving your tracked players, green for yours and red for theirs, with a rough half-PPR point estimate) or **Scoring**. Open live games refresh every 20 seconds. Game cards on **By game** have the same Play-by-play dropdown.
+- **Plays** has two views. **By game** lists the games with your or your opponents' starters, live first, with ESPN's live score and clock. Tap one to drop down its play-by-play: **All**, **Players** (plays involving your tracked players, green for yours and red for theirs, with a rough half-PPR point estimate) or **Scoring**. Open live games refresh every 20 seconds. Game cards on **Games** have the same Play-by-play dropdown. **All games** combines the plays from every live game into one feed, newest first: plays involving your players (green) or the players you're facing (red), or just scoring plays.
 - **Leagues** shows where each league's lineup came from, with Sync, Edit and Connect actions. The slider button on a league opens its settings: name, color (12 presets or a custom color), move up or down, link to Sleeper or ESPN, and delete. **Add a league** at the bottom creates a new one, and you can link it straight away. Renaming keeps the league's lineups and link.
-- Built-in connections are in `src/App.jsx` (`DEFAULT_CONN`):
-  - RDL and DFL come from Sleeper (user `Uncutgems82`). They're matched to Sleeper leagues by name or initials; if that fails, pick the right league once under Connect.
-  - Deloitte comes from ESPN (league 308619009, team 1). This works only if the league is public.
-  - Breezewood is a private ESPN league. It syncs through the ESPN helper once you set it up (see `../espn-helper/README.md`) and enter its IDs under Connect.
+- Each league is linked under **Source**/**Connect**:
+  - **Sleeper**: enter your username and pick the league.
+  - **ESPN**: league ID and team ID. Private leagues go through the ESPN helper (see `../espn-helper/README.md`).
+  - **MFL** (MyFantasyLeague): league ID, franchise ID and, for private leagues, an API key.
+  - **FFPC**: no feed this app can read, so FFPC leagues are labelled and filled in by hand with **Edit**.
+  - **By hand**: edit starters yourself.
 - Connected leagues sync when the app opens, when you switch weeks and when it returns to the foreground, at most once every 15 minutes. **Sync** in the header forces a refresh.
-- Everything is saved in the browser's `localStorage` on the device, under `ff-tracker-custom-v1`. On first open it copies the original app's data (`ff-tracker-v3`) if that exists on the same site, and it never writes to that key. A week you haven't updated starts from last week's starters.
+- Leagues are saved to the signed-in account and also cached on the device (`localStorage`, one entry per account), so the app opens instantly and keeps working offline; changes upload when you're back online. The original app's data (`ff-tracker-v3`) is only ever read, for the one-time import, and never written. API keys and helper links you enter under Connect are saved to your account too. A week you haven't updated starts from last week's starters.
 
 ## Differences from the design
 

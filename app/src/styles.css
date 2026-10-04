@@ -374,3 +374,19 @@ button.lrow:active { background: var(--surface-3); }
 .all-live .seg-thumb { background: var(--surface-3); }
 .play-game { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; letter-spacing: 0.02em; color: var(--text); padding: 2px 8px 2px 4px; border-radius: 999px; background: var(--surface-2); }
 .segmented[style*="--n: 5"] > button { font-size: 12.5px; padding: 9px 2px; }
+
+/* ── Sign in & account ─────────────────────────────────── */
+.auth-body { display: grid; place-items: center; padding-top: calc(var(--safe-top) + 24px); }
+.auth { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 14px; align-items: stretch; text-align: center; }
+.auth .title { font-size: 30px; }
+.auth-logo { align-self: center; border-radius: 16px; }
+.auth-sub { margin: 0; color: var(--muted); font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.auth-card { padding: 16px; display: flex; flex-direction: column; gap: 14px; text-align: left; }
+.auth-card .segmented { background: var(--surface-2); }
+.auth-card .seg-thumb { background: #353e52; }
+.auth-link { align-self: center; color: var(--muted); font-weight: 600; font-size: 14px; }
+.auth-spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--surface-3); border-top-color: var(--mint); animation: spin .8s linear infinite; }
+.account { padding: 14px; }
+.account-row { display: flex; align-items: center; gap: 12px; }
+.acct-email { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acct-offline { color: var(--amber); }

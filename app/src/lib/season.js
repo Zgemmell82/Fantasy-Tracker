@@ -14,14 +14,14 @@ export function currentWeek(now = Date.now()) {
 }
 
 // A week nobody has touched starts from week 1's lineups, else last week's starters, else the baseline roster.
-// An added league has no built-in lineup, so it starts empty.
-export function seedWeek(w, data, names = LEAGUE_NAMES) {
+// Only the original owner's leagues (builtin) have a starting lineup; every other league starts empty.
+export function seedWeek(w, data, names = LEAGUE_NAMES, builtin = false) {
   const out = {};
   const prev = data && data[w - 1];
   names.forEach(n => {
-    if (w === 1 && WEEK1[n]) out[n] = { mine: WEEK1[n].mine.map(mkPlayer), opp: WEEK1[n].opp.map(mkPlayer) };
+    if (builtin && w === 1 && WEEK1[n]) out[n] = { mine: WEEK1[n].mine.map(mkPlayer), opp: WEEK1[n].opp.map(mkPlayer) };
     else if (prev && prev[n]) out[n] = { mine: prev[n].mine.map(mkPlayer), opp: [] };
-    else out[n] = { mine: (BASELINE_ROSTERS[n] || []).map(mkPlayer), opp: [] };
+    else out[n] = { mine: builtin ? (BASELINE_ROSTERS[n] || []).map(mkPlayer) : [], opp: [] };
   });
   return out;
 }

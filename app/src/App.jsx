@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { LEAGUE_NAMES, PLAYERS } from './data.js';
-import { LS, LS_ORIGINAL, load, save } from './lib/store.js';
+import { PLAYERS } from './data.js';
+import { load, save } from './lib/store.js';
 import { SEASON, WEEKS, currentWeek, seedWeek } from './lib/season.js';
+import { cloudState, hydrate, legacyDb, userKey } from './lib/account.js';
+import { pullState, pushState, supabase } from './lib/cloud.js';
+import { AuthScreen, NewPassword, SetupNeeded, Splash, useSession } from './Auth.jsx';
 import { mkPlayer } from './lib/teams.js';
 import { Avatar, Icon, LEAGUE_COLORS, LeagueColors, PosChip, Segmented, Sheet, Switch, TeamLogo, useLeagueColor } from './ui.jsx';
 import { fmtPts, groupByGame, liveNow, weekStarted } from './lib/games.js';
@@ -15,28 +18,9 @@ function syncEspnFor(c, week, helper) {
   return syncEspn(c.leagueId, c.teamId, week, c.private ? helper : '');
 }
 
-const DEFAULT_USER = 'Uncutgems82';
-const DEFAULT_CONN = {
-  RDL: { source: 'sleeper' },
-  DFL: { source: 'sleeper' },
-  Deloitte: { source: 'espn', leagueId: '308619009', teamId: '1' },
-  Breezewood: { source: 'espn', private: true }
-};
 const SRC_NAME = { sleeper: 'Sleeper', espn: 'ESPN', mfl: 'MFL', ffpc: 'FFPC', manual: 'By hand' };
 const RESYNC_MS = 15 * 60000;
 const LIVE_RESYNC_MS = 2 * 60000;
-
-// The built-in connections apply unless a league has been linked to something else.
-function mergeConn(saved, names) {
-  const out = {};
-  names.forEach(n => {
-    const s = saved[n];
-    out[n] = s && (s.source === 'ffpc' || (s.source !== 'manual' && (s.leagueId || s.source === 'sleeper'))) ? s
-      : DEFAULT_CONN[n] ? { ...DEFAULT_CONN[n] }
-      : s || { source: 'manual' };
-  });
-  return out;
-}
 
 // FFPC has no feed this app can read, so it is labelled but never auto-synced.
 const isLinked = c => !!c && c.source !== 'manual' && c.source !== 'ffpc' && !!(c.leagueId || c.source === 'sleeper');
@@ -70,37 +54,106 @@ function renameIn(db, from, to) {
   return { ...db, data, conn, synced };
 }
 
-function initialDb() {
-  // First open of this copy: start from the original tracker's saved lineups, without changing them.
-  const s = load(LS, null) || load(LS_ORIGINAL, null) || {};
-  const leagues = Array.isArray(s.leagues) && s.leagues.length
-    ? s.leagues
-    : LEAGUE_NAMES.map((name, i) => ({ name, color: LEAGUE_COLORS[i % LEAGUE_COLORS.length] }));
-  const names = leagues.map(l => l.name);
-  const week = currentWeek();
-  const data = s.data || {};
-  if (!data[week]) data[week] = seedWeek(week, data, names);
-  // Weeks saved before a league was added get that league's starting lineup.
-  Object.keys(data).forEach(w => {
-    const missing = names.filter(n => !data[w][n]);
-    if (missing.length) { const seed = seedWeek(Number(w), data, missing); missing.forEach(n => { data[w][n] = seed[n]; }); }
-  });
-  return {
-    week, data, leagues,
-    scored: s.scored || {},
-    conn: mergeConn(s.conn || {}, names),
-    sleeperUser: s.sleeperUser || DEFAULT_USER,
-    espnHelper: s.espnHelper || '',
-    synced: s.synced || {}
-  };
+// Signed out -> the sign-in screen; signed in -> that account's own dashboard.
+export default function App() {
+  const [s, setS] = useSession();
+  if (s.status === 'setup') return <SetupNeeded />;
+  if (s.status === 'loading') return <Splash />;
+  if (!s.user) return <AuthScreen />;
+  if (s.recovery) return <NewPassword onDone={() => setS(p => ({ ...p, recovery: false }))} />;
+  return <Tracker key={s.user.id} user={s.user} onSignOut={() => supabase.auth.signOut()} />;
 }
 
-export default function App() {
-  // Saved on the device: lineups per week, crossed-off players, connections, sync results.
-  const [db, setDb] = useState(initialDb);
+function Tracker({ user, onSignOut }) {
+  // Lineups, crossed-off players and connections are kept on this device and in the signed-in account,
+  // so a second device picks up the same leagues. Sync results stay on the device.
+  const key = userKey(user.id);
+  const stored = useRef(null);
+  if (stored.current === null) stored.current = load(key, null) || false;
+  const [db, setDb] = useState(() => hydrate(stored.current || {}));
   const dbRef = useRef(db);
   dbRef.current = db;
-  useEffect(() => { save(LS, db); }, [db]);
+
+  // meta.syncedAt: the account copy this device last matched; meta.dirty: changes not yet sent to the account.
+  const meta = useRef((stored.current && stored.current._meta) || { syncedAt: 0, dirty: false });
+  const lastJson = useRef(null);
+  if (lastJson.current === null) lastJson.current = JSON.stringify(cloudState(db));
+  const ready = useRef(false);          // true once the account copy has been read; nothing is sent before that
+  const pushTimer = useRef(0);
+  const retryTimer = useRef(0);
+  const [cloud, setCloud] = useState({ phase: 'loading', err: '' });   // loading | ok | syncing | offline | error
+  const [legacy] = useState(() => legacyDb());
+
+  const push = useCallback(async () => {
+    clearTimeout(pushTimer.current);
+    const json = JSON.stringify(cloudState(dbRef.current));
+    const at = Date.now();
+    setCloud(c => ({ ...c, phase: 'syncing' }));
+    try {
+      await pushState(user.id, JSON.parse(json), at);
+      lastJson.current = json;
+      meta.current = { syncedAt: at, dirty: JSON.stringify(cloudState(dbRef.current)) !== json };
+      save(key, { ...dbRef.current, _meta: meta.current });
+      setCloud({ phase: 'ok', err: '' });
+    } catch (e) {
+      setCloud({ phase: 'offline', err: e.message });
+      pushTimer.current = setTimeout(push, 30000);
+    }
+  }, [user.id, key]);
+
+  // Reads the account copy and decides which side is newer: a brand-new device takes the account's,
+  // a device with unsent changes sends its own.
+  const settle = useCallback(async () => {
+    clearTimeout(retryTimer.current);
+    try {
+      const row = await pullState(user.id);
+      const m = meta.current;
+      if (row && !m.dirty && row.at > m.syncedAt) {
+        const next = hydrate(row.state, { week: dbRef.current.week });
+        lastJson.current = JSON.stringify(cloudState(next));
+        meta.current = { syncedAt: row.at, dirty: false };
+        setDb(prev => ({ ...next, synced: prev.synced }));
+        ready.current = true;
+        setCloud({ phase: 'ok', err: '' });
+      } else if (!row || m.dirty) {
+        ready.current = true;
+        await push();
+      } else {
+        ready.current = true;
+        setCloud({ phase: 'ok', err: '' });
+      }
+    } catch (e) {
+      // Never saved on this device: showing an empty dashboard could later overwrite the account, so wait.
+      setCloud({ phase: meta.current.syncedAt ? 'offline' : 'error', err: e.message });
+      retryTimer.current = setTimeout(settle, 30000);
+    }
+  }, [user.id, push]);
+
+  useEffect(() => { settle(); return () => { clearTimeout(pushTimer.current); clearTimeout(retryTimer.current); }; }, [settle]);
+  // Coming back to the app picks up edits made on another device, as long as nothing here is waiting to send.
+  useEffect(() => {
+    const onVis = () => { if (document.visibilityState === 'visible' && ready.current && !meta.current.dirty) settle(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [settle]);
+
+  useEffect(() => {
+    const json = JSON.stringify(cloudState(db));
+    const changed = json !== lastJson.current;
+    if (changed) meta.current = { ...meta.current, dirty: true };
+    save(key, { ...db, _meta: meta.current });
+    if (changed && ready.current) { clearTimeout(pushTimer.current); pushTimer.current = setTimeout(push, 1200); }
+  }, [db, key, push]);
+
+  const signOut = async () => {
+    if (ready.current && meta.current.dirty) await push();
+    onSignOut();
+  };
+  const importLegacy = () => {
+    if (!legacy) return;
+    setDb(prev => ({ ...legacy, week: prev.week, synced: {} }));
+    flash('Imported ' + legacy.leagues.length + ' leagues');
+  };
 
   const [screen, setScreen] = useState('games');
   const [filter, setFilter] = useState('all');
@@ -278,6 +331,18 @@ export default function App() {
   const colors = Object.fromEntries(db.leagues.map(l => [l.name, l.color]));
   const colorOf = name => colors[name] || LEAGUE_COLORS[0];
 
+  if (cloud.phase === 'loading') return <Splash />;
+  if (cloud.phase === 'error') {
+    return (
+      <div className="app"><main className="body auth-body"><div className="auth">
+        <h1 className="title">Can't load your account</h1>
+        <div className="banner err"><Icon.alert size={16} sw={2.5} /><span>{cloud.err || 'Couldn\'t reach the server.'}</span></div>
+        <button className="pill-btn primary wide" onClick={() => { setCloud({ phase: 'loading', err: '' }); settle(); }}>Try again</button>
+        <button className="pill-btn wide" onClick={onSignOut}>Sign out</button>
+      </div></main></div>
+    );
+  }
+
   return (
     <LeagueColors.Provider value={colorOf}>
     <div className="app">
@@ -299,7 +364,7 @@ export default function App() {
           ? <Games week={week} wk={wk} names={names} scored={scoredWeek} filter={filter} setFilter={setFilter} onToggle={toggleScored} board={board} helper={db.espnHelper} />
           : screen === 'plays'
           ? <PlaysScreen games={groupByGame(week, wk, undefined, names).games} board={board} boardError={boardError} helper={db.espnHelper} scored={scoredWeek} />
-          : <Leagues week={week} wk={wk} leagues={db.leagues} conn={db.conn} synced={db.synced} syncing={syncing}
+          : <Leagues week={week} wk={wk} leagues={db.leagues} conn={db.conn} account={{ email: user.email, cloud, onSignOut: signOut, canImport: !!legacy && !db.leagues.length, onImport: importLegacy, onRetry: settle }} synced={db.synced} syncing={syncing}
               onSync={async n => { if (await syncOne(n, week)) flash(n + ' synced'); }}
               onEdit={setEditFor} onConnect={setConnFor} onSettings={setLeagueFor} />}
       </main>
@@ -475,9 +540,17 @@ function Games({ week, wk, names, scored, filter, setFilter, onToggle, board, he
   );
 }
 
-function Leagues({ week, wk, leagues, conn, synced, syncing, onSync, onEdit, onConnect, onSettings }) {
+function Leagues({ week, wk, leagues, conn, synced, syncing, account, onSync, onEdit, onConnect, onSettings }) {
   return (
     <div className="stack">
+      {!leagues.length && (
+        <div className="card empty">
+          <Icon.trophy size={28} />
+          <div className="empty-t">Add your first league</div>
+          <div className="empty-d">Name it, pick a color, then link it to Sleeper, ESPN or MyFantasyLeague, or fill it in by hand.</div>
+          {account.canImport && <button className="pill-btn wide" onClick={account.onImport}><Icon.refresh size={15} sw={2.5} />Import the leagues saved on this device</button>}
+        </div>
+      )}
       {leagues.map(({ name: n, color }) => {
         const l = wk[n] || { mine: [], opp: [] };
         const c = conn[n] || { source: 'manual' };
@@ -519,7 +592,24 @@ function Leagues({ week, wk, leagues, conn, synced, syncing, onSync, onEdit, onC
         );
       })}
       <button className="pill-btn wide add-league" onClick={() => onSettings({ name: '' })}><Icon.plus size={17} sw={2.5} />Add a league</button>
-      <p className="hint">Lineups are saved on this phone. Connected leagues refresh whenever you open the app.</p>
+      <section className="card account">
+        <div className="account-row">
+          <span className="lavatar" style={{ '--lc': '#2fe0b0' }}>{(account.email || '?').slice(0, 1).toUpperCase()}</span>
+          <div className="league-id">
+            <div className="league-name acct-email">{account.email}</div>
+            <div className={'league-src acct-' + account.cloud.phase}>
+              {account.cloud.phase === 'syncing' ? 'Saving to your account…'
+                : account.cloud.phase === 'offline' ? 'Offline · changes will save when you\'re back online'
+                : 'Signed in · saved to your account'}
+            </div>
+          </div>
+        </div>
+        <div className="league-actions">
+          {account.cloud.phase === 'offline' && <button className="pill-btn" onClick={account.onRetry}><Icon.refresh size={15} sw={2.5} />Retry</button>}
+          <button className="pill-btn" onClick={account.onSignOut}>Sign out</button>
+        </div>
+      </section>
+      <p className="hint">Your leagues are saved to your account. Connected leagues refresh whenever you open the app.</p>
     </div>
   );
 }
