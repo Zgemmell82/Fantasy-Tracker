@@ -7,6 +7,7 @@ import { Avatar, Icon, LEAGUE_COLORS, LeagueColors, PosChip, Segmented, Sheet, S
 import { fmtPts, groupByGame, liveNow, weekStarted } from './lib/games.js';
 import { matchSleeperLeague, sleeperLeagues, syncSleeper } from './lib/sleeper.js';
 import { syncEspn } from './lib/espn.js';
+import { syncMfl } from './lib/mfl.js';
 import { Feed, GameStatus, PlaysScreen, useScoreboard } from './Plays.jsx';
 
 function syncEspnFor(c, week, helper) {
@@ -21,7 +22,7 @@ const DEFAULT_CONN = {
   Deloitte: { source: 'espn', leagueId: '308619009', teamId: '1' },
   Breezewood: { source: 'espn', private: true }
 };
-const SRC_NAME = { sleeper: 'Sleeper', espn: 'ESPN', manual: 'By hand' };
+const SRC_NAME = { sleeper: 'Sleeper', espn: 'ESPN', mfl: 'MFL', ffpc: 'FFPC', manual: 'By hand' };
 const RESYNC_MS = 15 * 60000;
 const LIVE_RESYNC_MS = 2 * 60000;
 
@@ -30,14 +31,15 @@ function mergeConn(saved, names) {
   const out = {};
   names.forEach(n => {
     const s = saved[n];
-    out[n] = s && s.source !== 'manual' && (s.leagueId || s.source === 'sleeper') ? s
+    out[n] = s && (s.source === 'ffpc' || (s.source !== 'manual' && (s.leagueId || s.source === 'sleeper'))) ? s
       : DEFAULT_CONN[n] ? { ...DEFAULT_CONN[n] }
       : s || { source: 'manual' };
   });
   return out;
 }
 
-const isLinked = c => !!c && c.source !== 'manual' && !!(c.leagueId || c.source === 'sleeper');
+// FFPC has no feed this app can read, so it is labelled but never auto-synced.
+const isLinked = c => !!c && c.source !== 'manual' && c.source !== 'ffpc' && !!(c.leagueId || c.source === 'sleeper');
 const namesOf = db => db.leagues.map(l => l.name);
 const MAX_NAME = 24;
 
@@ -196,6 +198,10 @@ export default function App() {
       }
       return syncSleeper(sleeperUser, leagueId, week);
     }
+    if (c.source === 'mfl') {
+      if (!c.leagueId || !c.teamId) return Promise.reject(new Error('Add the league ID and franchise ID under Source.'));
+      return syncMfl(c.leagueId, c.teamId, week, c.apiKey);
+    }
     return syncEspnFor(c, week, dbRef.current.espnHelper);
   }, [setConn]);
 
@@ -313,6 +319,7 @@ export default function App() {
         syncErr={(db.synced[connFor + ':' + week] || {}).err}
         takenIds={names.filter(n => n !== connFor && db.conn[n] && db.conn[n].source === 'sleeper').map(n => db.conn[n].leagueId).filter(Boolean)}
         espnHelper={db.espnHelper} setEspnHelper={u => setDb(prev => ({ ...prev, espnHelper: u.trim() }))}
+        testMfl={async c => { const res = await syncMfl(c.leagueId, c.teamId, week, c.apiKey); setLeague(week, connFor, res, 'mfl'); markSynced(connFor + ':' + week, { ok: true }); return res; }}
         testEspn={async c => { const res = await syncEspnFor(c, week, db.espnHelper); setLeague(week, connFor, res, 'espn'); markSynced(connFor + ':' + week, { ok: true }); return res; }}
         onClose={closeConn} />}
 
@@ -490,7 +497,7 @@ function Leagues({ week, wk, leagues, conn, synced, syncing, onSync, onEdit, onC
               <div className="league-id">
                 <div className="league-name">{n}</div>
                 <div className="league-src">
-                  {linked ? SRC_NAME[c.source] : 'Not connected'}
+                  {linked ? SRC_NAME[c.source] : c.source === 'ffpc' ? 'FFPC · by hand' : 'Not connected'}
                   {c.source === 'espn' && c.private ? <> · <Icon.lock size={11} sw={2.5} /> Private</> : null}
                 </div>
               </div>
@@ -557,7 +564,7 @@ function EditSheet({ league, week, lineup, onEdit, onClose }) {
   );
 }
 
-function ConnectSheet({ league, week, conn, sleeperUser, setSleeperUser, setConn, syncErr, takenIds, espnHelper, setEspnHelper, testEspn, onClose }) {
+function ConnectSheet({ league, week, conn, sleeperUser, setSleeperUser, setConn, syncErr, takenIds, espnHelper, setEspnHelper, testEspn, testMfl, onClose }) {
   const [sleeperList, setSleeperList] = useState(null);
   const [sleeperMsg, setSleeperMsg] = useState('');
   const [espnMsg, setEspnMsg] = useState('');
@@ -588,15 +595,58 @@ function ConnectSheet({ league, week, conn, sleeperUser, setSleeperUser, setConn
     setBusy(false);
   };
 
-  const pickSource = s => setConn({ source: s, leagueId: s === c.source ? c.leagueId : '', teamId: s === c.source ? c.teamId : '' });
+  const runMfl = async () => {
+    if (!c.leagueId || !c.teamId) { setEspnMsg('Enter both IDs.'); return; }
+    setBusy(true);
+    setEspnMsg('');
+    try {
+      const res = await testMfl(c);
+      setEspnMsg('Connected — pulled ' + res.mine.length + ' + ' + res.opp.length + ' starters.');
+    } catch (e) { setEspnMsg(e.message); }
+    setBusy(false);
+  };
+
+  const pickSource = s => setConn({ source: s, leagueId: s === c.source ? c.leagueId : '', teamId: s === c.source ? c.teamId : '', apiKey: s === c.source ? c.apiKey : '' });
   const ok = /^Connected/.test(espnMsg);
 
   return (
     <Sheet title={league} subtitle="Where this league's lineups come from" onClose={onClose} label={'Connect ' + league}>
-      <Segmented value={c.source} onChange={pickSource} options={[['sleeper', 'Sleeper'], ['espn', 'ESPN'], ['manual', 'By hand']]} />
+      <Segmented value={c.source} onChange={pickSource} options={[['sleeper', 'Sleeper'], ['espn', 'ESPN'], ['mfl', 'MFL'], ['ffpc', 'FFPC'], ['manual', 'By hand']]} />
 
       {c.source === 'manual' && (
         <p className="sheet-note">You'll update this league each week by editing its players. Nothing is fetched automatically.</p>
+      )}
+
+      {c.source === 'ffpc' && (
+        <>
+          <p className="sheet-note">FFPC doesn't share lineups with outside apps, so this league is tracked by hand: tap <b>Edit</b> on the Leagues tab to add your starters and your opponent's each week. Choosing FFPC labels the league and keeps it from being replaced by a built-in link.</p>
+          <div className="field">
+            <label htmlFor="ffpc-id">FFPC league number (optional)</label>
+            <input id="ffpc-id" className="input" value={c.leagueId || ''} onChange={e => setConn({ leagueId: e.target.value.replace(/\D/g, '') })} inputMode="numeric" placeholder="For your own reference" />
+          </div>
+        </>
+      )}
+
+      {c.source === 'mfl' && (
+        <>
+          <div className="field-grid">
+            <div className="field">
+              <label htmlFor="mfl-league">League ID</label>
+              <input id="mfl-league" className="input" value={c.leagueId || ''} onChange={e => setConn({ leagueId: e.target.value.replace(/\D/g, '') })} inputMode="numeric" placeholder="12345" />
+            </div>
+            <div className="field">
+              <label htmlFor="mfl-team">Your franchise ID</label>
+              <input id="mfl-team" className="input" value={c.teamId || ''} onChange={e => setConn({ teamId: e.target.value.replace(/\D/g, '') })} inputMode="numeric" placeholder="0003" />
+            </div>
+          </div>
+          <div className="field">
+            <label htmlFor="mfl-key">API key (private leagues)</label>
+            <input id="mfl-key" className="input" value={c.apiKey || ''} onChange={e => setConn({ apiKey: e.target.value.trim() })} placeholder="Optional" autoCapitalize="off" autoCorrect="off" autoComplete="off" />
+          </div>
+          <button className="pill-btn primary wide" disabled={busy} onClick={runMfl}>{busy ? 'Connecting…' : 'Test connection'}</button>
+          {espnMsg && <div className={'banner ' + (/^Connected/.test(espnMsg) ? 'ok' : 'err')}>{/^Connected/.test(espnMsg) ? <Icon.check size={16} sw={2.5} /> : <Icon.alert size={16} sw={2.5} />}<span>{espnMsg}</span></div>}
+          <p className="sheet-note">On myfantasyleague.com the league ID is in your league's web address (<b>L=</b>) and the franchise ID is your team's number. The API key comes from MFL's Developers page. It's saved on this phone only. Syncs week {week}.</p>
+        </>
       )}
 
       {c.source === 'sleeper' && (

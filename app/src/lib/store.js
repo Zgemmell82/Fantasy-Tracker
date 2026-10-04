@@ -3,6 +3,7 @@
 export const LS = 'ff-tracker-custom-v1';
 export const LS_ORIGINAL = 'ff-tracker-v3';
 export const LS_PL = 'ff-sleeper-players';
+export const LS_MFL = 'ff-mfl-players';
 
 export function load(key, fallback) {
   try {

@@ -68,9 +68,41 @@ const short = name => {
 const qLabel = n => n > 4 ? (n === 5 ? 'OT' : n - 4 + 'OT') : 'Q' + n;
 const qTitle = n => n > 4 ? 'Overtime' : ['1st', '2nd', '3rd', '4th'][n - 1] + ' quarter';
 
+// One play with the tracked players it involved; game tags which game it came from in the all-games feed.
+function PlayCard({ p, isNew, scored, score, game }) {
+  const colorOf = useLeagueColor();
+  return (
+    <article className={'play' + (p.badge ? ' big' : '') + (isNew ? ' new' : '')}>
+      <div className="play-when"><b>{qLabel(p.period)}</b><span>{p.clock}</span></div>
+      <div className="play-main">
+        {(game || p.badge || p.down) && (
+          <div className="play-top">
+            {game && <span className="play-game"><TeamLogo team={game.away} size={16} />{game.away} @ {game.home}<TeamLogo team={game.home} size={16} /></span>}
+            {p.badge && <span className={'pbadge b-' + p.badge.toLowerCase()}>{p.badge}</span>}
+            {p.down && <span className="play-down">{p.down}</span>}
+          </div>
+        )}
+        <div className="play-text">{p.text}</div>
+        {p.hits.length > 0 && (
+          <div className="hits">
+            {p.hits.map(h => (
+              <span key={h.uid} className={'hit ' + h.side + (scored && scored[h.uid] ? ' done' : '')}>
+                <Avatar p={h} size={22} side={h.side} />
+                <span className="hit-name">{short(h.name)}</span>
+                {h.est !== 0 && <b className={'hit-est' + (h.est < 0 ? ' neg' : '')}>{h.est > 0 ? '+' : ''}{fmtPts(h.est)}</b>}
+                <span className="hit-lg">{h.leagues.map(l => <i key={l} style={{ background: colorOf(l) }} title={l} />)}</span>
+              </span>
+            ))}
+          </div>
+        )}
+        {p.scoring && score && <div className="play-score">{score.away} {p.awayScore} – {p.homeScore} {score.home}</div>}
+      </div>
+    </article>
+  );
+}
+
 export function Feed({ game, info, helper, scored }) {
   const [filter, setFilter] = useState('players');
-  const colorOf = useLeagueColor();
   const live = info && info.state === 'in';
   const feed = useFeed(info && info.state !== 'pre' ? info.id : null, live, helper);
   const tracked = useMemo(() => trackedFor(game), [game]);
@@ -101,32 +133,7 @@ export function Feed({ game, info, helper, scored }) {
       {shown.map(p => {
         const header = p.period !== lastQ ? <div className="q-sep" key={'q' + p.period + p.id}>{qTitle(p.period)}</div> : null;
         lastQ = p.period;
-        return [header,
-          <article key={p.id} className={'play' + (p.badge ? ' big' : '') + (feed.isNew(p.id) ? ' new' : '')}>
-            <div className="play-when"><b>{qLabel(p.period)}</b><span>{p.clock}</span></div>
-            <div className="play-main">
-              {(p.badge || p.down) && (
-                <div className="play-top">
-                  {p.badge && <span className={'pbadge b-' + p.badge.toLowerCase()}>{p.badge}</span>}
-                  {p.down && <span className="play-down">{p.down}</span>}
-                </div>
-              )}
-              <div className="play-text">{p.text}</div>
-              {p.hits.length > 0 && (
-                <div className="hits">
-                  {p.hits.map(h => (
-                    <span key={h.uid} className={'hit ' + h.side + (scored && scored[h.uid] ? ' done' : '')}>
-                      <Avatar p={h} size={22} side={h.side} />
-                      <span className="hit-name">{short(h.name)}</span>
-                      {h.est !== 0 && <b className={'hit-est' + (h.est < 0 ? ' neg' : '')}>{h.est > 0 ? '+' : ''}{fmtPts(h.est)}</b>}
-                      <span className="hit-lg">{h.leagues.map(l => <i key={l} style={{ background: colorOf(l) }} title={l} />)}</span>
-                    </span>
-                  ))}
-                </div>
-              )}
-              {p.scoring && feed.away && <div className="play-score">{feed.away} {p.awayScore} – {p.homeScore} {feed.home}</div>}
-            </div>
-          </article>];
+        return [header, <PlayCard key={p.id} p={p} isNew={feed.isNew(p.id)} scored={scored} score={feed.away ? { away: feed.away, home: feed.home } : null} />];
       })}
       {plays && <div className="feed-foot">Point swings are half-PPR estimates; your leagues' real totals come from Sleeper and ESPN.</div>}
     </div>
@@ -152,10 +159,108 @@ export function GameStatus({ game, info }) {
   return <span className="spill">{info ? info.detail : game.status}</span>;
 }
 
+const clockSecs = c => { const m = /^(\d+):(\d+)/.exec(c || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : 0; };
+
+// Every live game's plays at once, refreshed every 20s. Plays are ordered newest first: ones that arrived while
+// the screen was open first, then by quarter and clock (the best ordering across games the data allows).
+function useLiveFeeds(live, helper, active) {
+  const key = live.map(x => x.info.id).join(',');
+  const [state, setState] = useState({ byId: {}, at: 0, error: '', loaded: false });
+  const seen = useRef(new Map());   // play id -> when this screen first saw it (0 = there from the start)
+  const first = useRef(true);
+  useEffect(() => {
+    if (!active || !key) return;
+    let stop = false, timer = 0;
+    const ids = key.split(',');
+    const load = async () => {
+      const res = await Promise.allSettled(ids.map(id => fetchPlays(id, helper)));
+      if (stop) return;
+      const now = Date.now();
+      const byId = {};
+      res.forEach((r, i) => {
+        if (r.status !== 'fulfilled') return;
+        byId[ids[i]] = r.value;
+        r.value.plays.forEach(p => { if (!seen.current.has(ids[i] + ':' + p.id)) seen.current.set(ids[i] + ':' + p.id, first.current ? 0 : now); });
+      });
+      first.current = false;
+      const failed = res.filter(r => r.status === 'rejected');
+      setState(prev => ({
+        byId: Object.keys(byId).length ? { ...prev.byId, ...byId } : prev.byId, at: now, loaded: true,
+        error: failed.length === res.length ? failed[0].reason.message : ''
+      }));
+      timer = setTimeout(tick, 20000);
+    };
+    const tick = () => { if (visible()) load(); else timer = setTimeout(tick, 20000); };
+    load();
+    return () => { stop = true; clearTimeout(timer); };
+  }, [key, helper, active]);
+  return { ...state, seenAt: (gid, pid) => seen.current.get(gid + ':' + pid) || 0 };
+}
+
+const SHOW_STEP = 40;
+
+function AllLive({ games, board, helper, scored }) {
+  const [filter, setFilter] = useState('players');
+  const [limit, setLimit] = useState(SHOW_STEP);
+  const live = games.map(g => ({ g, info: board[g.key] })).filter(x => x.info && x.info.state === 'in');
+  const feeds = useLiveFeeds(live, helper, live.length > 0);
+  const startedAt = useRef(Date.now());
+
+  const items = useMemo(() => {
+    const out = [];
+    live.forEach(({ g, info }) => {
+      const f = feeds.byId[info.id];
+      if (!f) return;
+      matchPlays(f.plays, trackedFor(g)).forEach(p => {
+        if (filter === 'players' ? !p.hits.length : !p.scoring) return;
+        out.push({ p, game: { away: f.away || info.away, home: f.home || info.home }, gid: info.id, seen: feeds.seenAt(info.id, p.id) });
+      });
+    });
+    return out.sort((a, b) => (b.seen - a.seen) || (b.p.period - a.p.period) || (clockSecs(a.p.clock) - clockSecs(b.p.clock)) || (b.p.seq - a.p.seq));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feeds.byId, filter, board]);
+
+  if (!live.length) {
+    return (
+      <div className="card empty">
+        <Icon.activity size={28} />
+        <div className="empty-t">No games are live</div>
+        <div className="empty-d">When games with your players or your opponents' players kick off, all their plays collect here. Finished games are under By game.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="stack">
+      <div className="feed all-live">
+        <div className="feed-bar">
+          <Segmented value={filter} onChange={setFilter} options={[['players', 'Players'], ['scoring', 'Scoring']]} />
+          <div className="feed-meta">
+            <i className="dot-live" />{live.length} live {live.length === 1 ? 'game' : 'games'} · updates every 20s
+            {feeds.at ? ' · ' + new Date(feeds.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''}
+          </div>
+        </div>
+        {feeds.error && <div className="banner err"><Icon.alert size={16} sw={2.5} /><span>{feeds.error}</span></div>}
+        {!feeds.loaded && !feeds.error && <div className="feed-empty">Loading plays…</div>}
+        {feeds.loaded && !items.length && !feeds.error && (
+          <div className="feed-empty">{filter === 'players' ? 'None of your tracked players, or your opponents\', have shown up in a play yet.' : 'No scoring plays yet in the live games.'}</div>
+        )}
+        {items.slice(0, limit).map(({ p, game, gid, seen }) => (
+          <PlayCard key={gid + ':' + p.id} p={p} game={game} scored={scored} isNew={seen > startedAt.current}
+            score={game} />
+        ))}
+        {items.length > limit && <button className="pill-btn wide" onClick={() => setLimit(l => l + SHOW_STEP)}>Show {Math.min(SHOW_STEP, items.length - limit)} more</button>}
+        {feeds.loaded && <div className="feed-foot">Point swings are half-PPR estimates; your leagues' real totals come from your league sites.</div>}
+      </div>
+    </div>
+  );
+}
+
 const ORDER = { in: 0, pre: 1, post: 2 };
 
 export function PlaysScreen({ games, board, boardError, helper, scored }) {
   const [open, setOpen] = useState(null);
+  const [view, setView] = useState('games');
   const list = games
     .map(g => ({ g, info: board[g.key] }))
     .sort((a, b) => (ORDER[a.info ? a.info.state : 'pre'] - ORDER[b.info ? b.info.state : 'pre']));
@@ -170,10 +275,14 @@ export function PlaysScreen({ games, board, boardError, helper, scored }) {
     );
   }
 
+  const nLive = list.filter(x => x.info && x.info.state === 'in').length;
+
   return (
     <div className="stack">
+      <Segmented value={view} onChange={setView} options={[['games', 'By game'], ['all', 'All games' + (nLive ? ' · ' + nLive + ' live' : '')]]} />
       {boardError && <div className="banner err"><Icon.alert size={16} sw={2.5} /><span>{boardError} Scores and plays will show once ESPN is reachable.</span></div>}
-      {list.map(({ g, info }) => {
+      {view === 'all' && <AllLive games={games} board={board} helper={helper} scored={scored} />}
+      {view === 'games' && list.map(({ g, info }) => {
         const isOpen = open === g.key;
         return (
           <section key={g.key} className={'card pgame' + (isOpen ? ' open' : '')}>
