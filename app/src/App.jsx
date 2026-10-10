@@ -532,7 +532,7 @@ function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter
                 <button className={'pbp-toggle' + (pbp === g.key ? ' open' : '')} onClick={() => setPbp(pbp === g.key ? null : g.key)} aria-expanded={pbp === g.key}>
                   <Icon.activity size={15} sw={2.5} />Play-by-play<span className="chev"><Icon.chevron size={16} sw={2.5} /></span>
                 </button>
-                {pbp === g.key && <Feed game={g} info={board[g.key]} helper={helper} scored={scored} />}
+                {pbp === g.key && <Feed game={g} info={board[g.key]} helper={helper} scored={scored} leagues={leagues} />}
               </>
             )}
           </section>

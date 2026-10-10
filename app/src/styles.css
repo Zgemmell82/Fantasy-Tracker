@@ -454,3 +454,28 @@ button.lrow:active { background: var(--surface-3); }
 .mu-cell.mine .mu-pts { color: var(--mint); }
 .mu-cell.opp .mu-pts { color: var(--coral); }
 .mu-pts.none { color: var(--faint) !important; font-weight: 600; }
+
+/* ── Post-game recap ───────────────────────────────────── */
+.rc-league { background: var(--surface); border-radius: 16px; padding: 12px 12px 6px; display: flex; flex-direction: column; }
+.rc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 8px; }
+.rc-head .ltag { font-size: 12px; padding: 3px 9px; }
+.rc-total { font-size: 13px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rc-total b { font-size: 15px; font-weight: 800; }
+.rc-total i { font-style: normal; margin: 0 6px; color: var(--faint); }
+.rc-total .mint, .rc-row .mint { color: var(--mint); }
+.rc-total .coral, .rc-row .coral { color: var(--coral); }
+.rc-cols, .rc-row { display: grid; grid-template-columns: 38px 1fr 1fr 96px; align-items: center; column-gap: 6px; }
+.rc-cols { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--faint); padding: 0 6px 4px; }
+.rc-cols span:nth-child(2), .rc-cols span:nth-child(3), .rc-row > span:nth-child(2), .rc-row > span:nth-child(3) { text-align: right; }
+.rc-q { border-top: 1px solid var(--line); }
+.rc-row { width: 100%; padding: 11px 6px; font-variant-numeric: tabular-nums; text-align: left; border-radius: 10px; transition: background .15s; }
+.rc-row:not(:disabled):active { background: var(--surface-2); }
+.rc-row:disabled { opacity: .55; }
+.rc-row > b { font-size: 14px; font-weight: 800; }
+.rc-row > span:nth-child(2), .rc-row > span:nth-child(3) { font-size: 16px; font-weight: 800; }
+.rc-row .zero { color: var(--faint); font-weight: 600; }
+.rc-n { display: flex; align-items: center; justify-content: flex-end; gap: 4px; font-size: 12px; color: var(--muted); }
+.rc-n svg { transition: transform .2s var(--ease); }
+.rc-row.open .rc-n svg { transform: rotate(180deg); }
+.rc-plays { display: flex; flex-direction: column; gap: 8px; padding: 4px 0 12px; animation: drop .25s var(--ease); }
+.rc-plays .play { background: var(--surface-2); }

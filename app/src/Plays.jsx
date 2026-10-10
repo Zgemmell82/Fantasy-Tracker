@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchPlays, fetchScoreboard, matchPlays } from './lib/pbp.js';
 import { fmtPts } from './lib/games.js';
+import { buildRecap } from './lib/recap.js';
 import { Avatar, Icon, LeagueFilter, Segmented, TeamLogo, useLeagueColor } from './ui.jsx';
 
 const visible = () => document.visibilityState === 'visible';
@@ -109,21 +110,40 @@ function PlayCard({ p, isNew, scored, score, game }) {
   );
 }
 
-export function Feed({ game, info, helper, scored }) {
+export function Feed({ game, info, helper, scored, leagues = [] }) {
   const [filter, setFilter] = useState('players');
+  const [view, setView] = useState('recap');           // finished games open on the recap
   const live = info && info.state === 'in';
   const feed = useFeed(info && info.state !== 'pre' ? info.id : null, live, helper);
   const tracked = useMemo(() => trackedFor(game), [game]);
-  const plays = useMemo(() => feed.plays ? matchPlays(feed.plays, tracked).reverse() : null, [feed.plays, tracked]);
+  const matched = useMemo(() => feed.plays ? matchPlays(feed.plays, tracked) : null, [feed.plays, tracked]);   // oldest first
+  const plays = useMemo(() => matched ? [...matched].reverse() : null, [matched]);   // newest first
 
   if (!info) return <div className="feed"><div className="feed-empty">Looking up this game on ESPN…</div></div>;
   if (info.state === 'pre') return <div className="feed"><div className="feed-empty"><Icon.clock size={18} />Play-by-play starts at kickoff · {game.time}</div></div>;
 
   const shown = !plays ? [] : plays.filter(p => filter === 'all' || (filter === 'players' ? p.hits.length : p.scoring));
   let lastQ = null;
+  const final = info.state === 'post';
+  const scoreOf = feed.away ? { away: feed.away, home: feed.home } : null;
+  const switcher = final && (
+    <Segmented value={view} onChange={setView} options={[['recap', 'Recap'], ['plays', 'Play-by-play']]} />
+  );
+
+  if (final && view === 'recap') {
+    return (
+      <div className="feed">
+        {switcher}
+        {feed.error && <div className="banner err"><Icon.alert size={16} sw={2.5} /><span>{feed.error}</span></div>}
+        {!matched && !feed.error && <div className="feed-empty">Loading the game…</div>}
+        {matched && <Recap matched={matched} leagues={leagues} score={scoreOf} scored={scored} />}
+      </div>
+    );
+  }
 
   return (
     <div className="feed">
+      {switcher}
       <div className="feed-bar">
         <Segmented value={filter} onChange={setFilter} options={[['all', 'All'], ['players', 'Players'], ['scoring', 'Scoring']]} />
         <div className="feed-meta">
@@ -141,10 +161,56 @@ export function Feed({ game, info, helper, scored }) {
       {shown.map(p => {
         const header = p.period !== lastQ ? <div className="q-sep" key={'q' + p.period + p.id}>{qTitle(p.period)}</div> : null;
         lastQ = p.period;
-        return [header, <PlayCard key={p.id} p={p} isNew={feed.isNew(p.id)} scored={scored} score={feed.away ? { away: feed.away, home: feed.home } : null} />];
+        return [header, <PlayCard key={p.id} p={p} isNew={feed.isNew(p.id)} scored={scored} score={scoreOf} />];
       })}
       {plays && <div className="feed-foot">Point swings are half-PPR estimates; your leagues' real totals come from Sleeper and ESPN.</div>}
     </div>
+  );
+}
+
+const sgn = n => (n > 0 ? '+' : '') + fmtPts(n);
+
+// A finished game, league by league: points you got and gave up in each quarter. Tap a quarter for the plays
+// behind it, in the order they happened.
+function Recap({ matched, leagues, score, scored }) {
+  const colorOf = useLeagueColor();
+  const [open, setOpen] = useState(null);
+  const rows = useMemo(() => buildRecap(matched, leagues), [matched, leagues]);
+
+  if (!rows.length) return <div className="feed-empty">None of your players, or your opponents', had a play in this game.</div>;
+  return (
+    <>
+      {rows.map(r => (
+        <section className="rc-league" key={r.league}>
+          <div className="rc-head">
+            <span className="ltag" style={{ '--lc': colorOf(r.league) }}>{r.league}</span>
+            <span className="rc-total">You <b className="mint">{sgn(r.forPts)}</b><i>·</i>Against <b className="coral">{sgn(r.againstPts)}</b></span>
+          </div>
+          <div className="rc-cols" aria-hidden="true"><span /><span>You</span><span>Against</span><span /></div>
+          {r.quarters.map(q => {
+            const key = r.league + '|' + q.period;
+            const isOpen = open === key;
+            return (
+              <div className="rc-q" key={key}>
+                <button className={'rc-row' + (isOpen ? ' open' : '')} disabled={!q.plays.length} aria-expanded={isOpen}
+                  onClick={() => setOpen(isOpen ? null : key)}>
+                  <b>{qLabel(q.period)}</b>
+                  <span className={'mint' + (q.forPts ? '' : ' zero')}>{q.forPts ? sgn(q.forPts) : '0'}</span>
+                  <span className={'coral' + (q.againstPts ? '' : ' zero')}>{q.againstPts ? sgn(q.againstPts) : '0'}</span>
+                  <span className="rc-n">{q.plays.length ? q.plays.length + (q.plays.length === 1 ? ' play' : ' plays') : '—'}<Icon.chevron size={15} sw={2.5} /></span>
+                </button>
+                {isOpen && (
+                  <div className="rc-plays">
+                    {q.plays.map(p => <PlayCard key={p.id} p={p} scored={scored} score={score} />)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </section>
+      ))}
+      <div className="feed-foot">Points are estimated from the play-by-play (half-PPR), so they can differ from your leagues' official scoring.</div>
+    </>
   );
 }
 
@@ -314,7 +380,7 @@ export function PlaysScreen({ games, board, boardError, helper, scored, leagues,
                 </span>
               </div>
             </button>
-            {isOpen && <Feed game={g} info={info} helper={helper} scored={scored} />}
+            {isOpen && <Feed game={g} info={info} helper={helper} scored={scored} leagues={leagues} />}
           </section>
         );
       })}
