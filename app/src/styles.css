@@ -421,24 +421,3 @@ button.lrow:active { background: var(--surface-3); }
 .left-mon b { font-weight: 800; }
 .left-mon .mint { color: var(--mint); }
 .left-mon .coral { color: var(--coral); }
-
-.mnf { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
-.mnf-head { display: flex; flex-direction: column; gap: 8px; }
-.mnf-title { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--amber); }
-.mnf-games { display: flex; flex-direction: column; gap: 6px; }
-.mnf-game { display: flex; align-items: center; gap: 6px; font-family: var(--font-display); font-size: 17px; }
-.mnf-game b { font-weight: 800; }
-.mnf-game .spill, .mnf-time { margin-left: auto; }
-.mnf-time { font-size: 13px; color: var(--muted); font-family: var(--font); }
-.mnf-row { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
-.mnf-row .ltag { align-self: flex-start; font-size: 12px; padding: 3px 9px; }
-.mnf-side { display: flex; flex-direction: column; gap: 5px; }
-.mnf-side > b { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
-.mnf-side.mine > b { color: var(--mint); }
-.mnf-side.opp > b { color: var(--coral); }
-.mnf-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.mnf-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 5px; border-radius: 999px; font-size: 13px; font-weight: 600; background: var(--surface-2); }
-.mnf-chip.mine { background: rgba(47, 224, 176, .12); }
-.mnf-chip.opp { background: rgba(255, 107, 127, .12); }
-.mnf-chip em { font-style: normal; font-size: 11px; color: var(--muted); }
-.mnf-none, .mnf-empty { font-size: 13px; color: var(--faint); }

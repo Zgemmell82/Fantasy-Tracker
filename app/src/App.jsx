@@ -3,7 +3,7 @@ import { PLAYERS } from './data.js';
 import { load, save } from './lib/store.js';
 import { SEASON, WEEKS, currentWeek, seedWeek } from './lib/season.js';
 import { cloudState, hydrate, legacyDb, userKey } from './lib/account.js';
-import { leagueRemaining, mondayGames } from './lib/remaining.js';
+import { leagueRemaining } from './lib/remaining.js';
 import { pullState, pushState, supabase } from './lib/cloud.js';
 import { AuthScreen, NewPassword, SetupNeeded, Splash, useSession } from './Auth.jsx';
 import { mkPlayer } from './lib/teams.js';
@@ -364,7 +364,7 @@ function Tracker({ user, onSignOut }) {
 
       <main className="body" key={screen}>
         {screen === 'games'
-          ? <Games week={week} wk={wk} names={names} remain={remain} scored={scoredWeek} filter={filter} setFilter={setFilter} onToggle={toggleScored} board={board} helper={db.espnHelper} />
+          ? <Games week={week} wk={wk} names={names} scored={scoredWeek} filter={filter} setFilter={setFilter} onToggle={toggleScored} board={board} helper={db.espnHelper} />
           : screen === 'plays'
           ? <PlaysScreen games={groupByGame(week, wk, undefined, names).games} board={board} boardError={boardError} helper={db.espnHelper} scored={scoredWeek} leagues={names} />
           : <Leagues week={week} wk={wk} leagues={db.leagues} remain={remain} conn={db.conn} account={{ email: user.email, cloud, onSignOut: signOut, canImport: !!legacy && !db.leagues.length, onImport: importLegacy, onRetry: settle }} synced={db.synced} syncing={syncing}
@@ -463,7 +463,7 @@ function StatusPill({ status }) {
   return <span className={'spill' + (status === 'Final' ? ' final' : '')}>{status}</span>;
 }
 
-function Games({ week, wk, names, remain, scored, filter, setFilter, onToggle, board, helper }) {
+function Games({ week, wk, names, scored, filter, setFilter, onToggle, board, helper }) {
   const [pbp, setPbp] = useState(null);
   const { games, bye } = groupByGame(week, wk, undefined, names);
   const shown = games.filter(g => filter === 'all' || g.mine.length);
@@ -490,8 +490,6 @@ function Games({ week, wk, names, remain, scored, filter, setFilter, onToggle, b
         </div>
         <div className="sum-foot">{done} of {all.length} checked off</div>
       </div>
-
-      <MondayNight week={week} names={names} remain={remain} board={board} />
 
       <Segmented value={filter} onChange={setFilter} options={[['all', 'All games'], ['mine', 'My players']]} />
 
@@ -840,43 +838,6 @@ function LeftToPlay({ r }) {
         </div>
       )}
     </div>
-  );
-}
-
-// Who is still to play in the Monday night game, for and against, league by league.
-function MondayNight({ week, names, remain, board }) {
-  const colorOf = useLeagueColor();
-  const games = mondayGames(week);
-  if (!games.length) return null;
-  const infos = games.map(g => board[g.a + '@' + g.h]);
-  if (infos.length && infos.every(i => i && i.state === 'post')) return null;
-  const rows = names.map(n => ({ n, m: remain[n] && remain[n].monday })).filter(x => x.m && (x.m.mine.length || x.m.opp.length));
-  const chips = (list, side) => list.length
-    ? list.map(p => <span key={side + p.name + p.team} className={'mnf-chip ' + side}><PosChip pos={p.pos} />{p.name}{games.length > 1 ? <em>{p.team}</em> : null}</span>)
-    : <span className="mnf-none">No one</span>;
-  return (
-    <section className="card mnf" aria-label="Monday night">
-      <div className="mnf-head">
-        <div className="mnf-title"><Icon.clock size={15} sw={2.5} />Monday night</div>
-        <div className="mnf-games">
-          {games.map((g, i) => (
-            <span key={g.a + g.h} className="mnf-game">
-              <TeamLogo team={g.a} size={20} /><b>{g.a}</b><span className="at">@</span><TeamLogo team={g.h} size={20} /><b>{g.h}</b>
-              {infos[i] && infos[i].state === 'in' ? <span className="spill live"><i />{infos[i].detail || 'Live'}</span> : <span className="mnf-time">{g.d.replace(/^Mon /, '')}</span>}
-            </span>
-          ))}
-        </div>
-      </div>
-      {rows.length === 0
-        ? <div className="mnf-empty">None of your starters, or your opponents', are in the Monday night game.</div>
-        : rows.map(({ n, m }) => (
-          <div key={n} className="mnf-row">
-            <span className="ltag" style={{ '--lc': colorOf(n) }}>{n}</span>
-            <div className="mnf-side mine"><b>For you</b><div className="mnf-chips">{chips(m.mine, 'mine')}</div></div>
-            <div className="mnf-side opp"><b>Against you</b><div className="mnf-chips">{chips(m.opp, 'opp')}</div></div>
-          </div>
-        ))}
-    </section>
   );
 }
 
