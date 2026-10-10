@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { cloudConfigured, supabase } from './lib/cloud.js';
+import { checkCloud, cloudConfigured, cloudHost, cloudProblem, supabase } from './lib/cloud.js';
 import { Icon } from './ui.jsx';
 
 // Who is signed in. The session is kept on the device, so a person signs in once and stays signed in.
 export function useSession() {
-  const [s, setS] = useState({ status: cloudConfigured ? 'loading' : 'setup', user: null, recovery: false });
+  const [s, setS] = useState({ status: cloudConfigured && supabase ? 'loading' : 'setup', user: null, recovery: false });
   useEffect(() => {
     if (!supabase) return;
     // Token refreshes hand back the same user; keep the same object so the app below doesn't re-render for them.
@@ -25,7 +25,7 @@ const friendly = msg => {
   if (/already registered|already been registered/i.test(m)) return 'There\'s already an account with that email. Try signing in.';
   if (/email not confirmed/i.test(m)) return 'Confirm your email first: open the link we sent, then sign in.';
   if (/rate limit|too many/i.test(m)) return 'Too many tries. Wait a minute and try again.';
-  if (/fetch|network/i.test(m)) return 'Couldn\'t reach the server. Check your connection.';
+  if (/load failed|failed to fetch|fetch|network|abort/i.test(m)) return 'Couldn\'t reach the account server' + (cloudHost ? ' (' + cloudHost + ')' : '') + '. Check your connection; if it keeps happening, the app\'s Supabase URL may be wrong.';
   return m || 'Something went wrong. Try again.';
 };
 
@@ -54,6 +54,7 @@ export function SetupNeeded() {
     <Shell>
       <div className="card auth-card">
         <p className="auth-sub">Sign-in isn't set up yet.</p>
+        {cloudProblem && <div className="banner err"><Icon.alert size={16} sw={2.5} /><span>{cloudProblem}</span></div>}
         <p className="sheet-note">The app needs its account server. In the repository, add the <b>SUPABASE_URL</b> and <b>SUPABASE_ANON_KEY</b> variables (Settings → Secrets and variables → Actions → Variables) and run the deploy again. The steps are in <b>app/README.md</b>.</p>
       </div>
     </Shell>
@@ -67,6 +68,8 @@ export function AuthScreen() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [note, setNote] = useState('');
+  const [diag, setDiag] = useState('');
+  useEffect(() => { checkCloud().then(setDiag); }, []);
 
   const go = mode => { setMode(mode); setErr(''); setNote(''); };
 
@@ -98,6 +101,7 @@ export function AuthScreen() {
   return (
     <Shell>
       <p className="auth-sub">{mode === 'up' ? 'Create an account to keep your leagues on every device.' : mode === 'forgot' ? 'We\'ll email you a link to choose a new password.' : 'Sign in to open your dashboard.'}</p>
+      {diag && <div className="banner err" role="alert"><Icon.alert size={16} sw={2.5} /><span>{diag}</span></div>}
       <form className="card auth-card" onSubmit={submit} noValidate>
         {mode !== 'forgot' && (
           <div className="segmented auth-tabs" role="tablist" style={{ '--n': 2, '--i': mode === 'up' ? 1 : 0 }}>
