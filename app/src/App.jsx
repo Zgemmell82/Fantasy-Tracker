@@ -5,6 +5,7 @@ import { SEASON, WEEKS, currentWeek, seedWeek } from './lib/season.js';
 import { cloudState, hydrate, legacyDb, userKey } from './lib/account.js';
 import { gameFor, gameState, leagueRemaining } from './lib/remaining.js';
 import { alignByPosition } from './lib/lineup.js';
+import { getTheme, setTheme } from './lib/theme.js';
 import { pullState, pushState, supabase } from './lib/cloud.js';
 import { AuthScreen, NewPassword, SetupNeeded, Splash, useSession } from './Auth.jsx';
 import { mkPlayer } from './lib/teams.js';
@@ -163,6 +164,7 @@ function Tracker({ user, onSignOut }) {
   const [connFor, setConnFor] = useState(null);
   const [leagueFor, setLeagueFor] = useState(null);
   const [matchupFor, setMatchupFor] = useState(null);
+  const [theme, setThemeState] = useState(getTheme);
   const [lgSel, setLgSel] = useState([]);       // leagues chosen in the filter; empty = all leagues
   const [syncing, setSyncing] = useState(false);
   const [toast, setToast] = useState('');
@@ -372,7 +374,7 @@ function Tracker({ user, onSignOut }) {
           ? <Games week={week} wk={wk} names={shown} leagues={names} sel={sel} onSel={setLgSel} scored={scoredWeek} filter={filter} setFilter={setFilter} onToggle={toggleScored} board={board} helper={db.espnHelper} />
           : screen === 'plays'
           ? <PlaysScreen games={groupByGame(week, wk, undefined, shown).games} board={board} boardError={boardError} helper={db.espnHelper} scored={scoredWeek} leagues={names} sel={sel} onSel={setLgSel} />
-          : <Leagues week={week} wk={wk} leagues={db.leagues} remain={remain} onMatchup={setMatchupFor} conn={db.conn} account={{ email: user.email, cloud, onSignOut: signOut, canImport: !!legacy && !db.leagues.length, onImport: importLegacy, onRetry: settle }} synced={db.synced} syncing={syncing}
+          : <Leagues week={week} wk={wk} leagues={db.leagues} remain={remain} onMatchup={setMatchupFor} theme={theme} onTheme={t => setThemeState(setTheme(t))} conn={db.conn} account={{ email: user.email, cloud, onSignOut: signOut, canImport: !!legacy && !db.leagues.length, onImport: importLegacy, onRetry: settle }} synced={db.synced} syncing={syncing}
               onSync={async n => { if (await syncOne(n, week)) flash(n + ' synced'); }}
               onEdit={setEditFor} onConnect={setConnFor} onSettings={setLeagueFor} />}
       </main>
@@ -559,7 +561,7 @@ function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter
   );
 }
 
-function Leagues({ week, wk, leagues, remain, onMatchup, conn, synced, syncing, account, onSync, onEdit, onConnect, onSettings }) {
+function Leagues({ week, wk, leagues, remain, onMatchup, theme, onTheme, conn, synced, syncing, account, onSync, onEdit, onConnect, onSettings }) {
   return (
     <div className="stack">
       {!leagues.length && (
@@ -615,6 +617,23 @@ function Leagues({ week, wk, leagues, remain, onMatchup, conn, synced, syncing, 
         );
       })}
       <button className="pill-btn wide add-league" onClick={() => onSettings({ name: '' })}><Icon.plus size={17} sw={2.5} />Add a league</button>
+      <section className="card gametime">
+        <div>
+          <div className="gt-head">Game time</div>
+          <div className="gt-sub">Pick how the app looks on this device.</div>
+        </div>
+        <div className="gt-opts" role="radiogroup" aria-label="Game time">
+          <button className={'gt-opt day' + (theme === 'light' ? ' on' : '')} role="radio" aria-checked={theme === 'light'} onClick={() => onTheme('light')}>
+            <span className="gt-ico"><Icon.sun size={22} sw={2.2} />{theme === 'light' && <i className="gt-check"><Icon.check size={13} sw={3.5} /></i>}</span>
+            <b>1:00 game</b><span>Light</span>
+          </button>
+          <button className={'gt-opt night' + (theme !== 'light' ? ' on' : '')} role="radio" aria-checked={theme !== 'light'} onClick={() => onTheme('dark')}>
+            <span className="gt-ico"><Icon.moon size={22} sw={2.2} />{theme !== 'light' && <i className="gt-check"><Icon.check size={13} sw={3.5} /></i>}</span>
+            <b>Night game</b><span>Dark</span>
+          </button>
+        </div>
+      </section>
+
       <section className="card account">
         <div className="account-row">
           <span className="lavatar" style={{ '--lc': '#2fe0b0' }}>{(account.email || '?').slice(0, 1).toUpperCase()}</span>

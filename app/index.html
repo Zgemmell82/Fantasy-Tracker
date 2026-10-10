@@ -10,6 +10,10 @@
   <meta name="apple-mobile-web-app-title" content="Fantasy">
   <link rel="icon" href="icon-v2.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon-v2.png">
+  <script>
+    // The 1:00 game (light) or the night game (dark, the default), as chosen on this device.
+    try { if (localStorage.getItem('ff-theme') === 'light') { document.documentElement.dataset.theme = 'light'; document.querySelector('meta[name="theme-color"]').content = '#f1f3f8'; } } catch (e) {}
+  </script>
   <title>Fantasy Tracker</title>
 </head>
 <body>
