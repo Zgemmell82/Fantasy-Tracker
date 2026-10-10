@@ -4,6 +4,7 @@ import { load, save } from './lib/store.js';
 import { SEASON, WEEKS, currentWeek, seedWeek } from './lib/season.js';
 import { cloudState, hydrate, legacyDb, userKey } from './lib/account.js';
 import { gameFor, gameState, leagueRemaining } from './lib/remaining.js';
+import { alignByPosition } from './lib/lineup.js';
 import { pullState, pushState, supabase } from './lib/cloud.js';
 import { AuthScreen, NewPassword, SetupNeeded, Splash, useSession } from './Auth.jsx';
 import { mkPlayer } from './lib/teams.js';
@@ -825,7 +826,10 @@ function MatchupSheet({ league, week, lineup, board, onClose }) {
   const pts = list => list.some(p => typeof p.pts === 'number') ? list.reduce((n, p) => n + (p.pts || 0), 0) : null;
   const mine = l.score && l.score.mine != null ? l.score.mine : pts(l.mine);
   const opp = l.score && l.score.opp != null ? l.score.opp : pts(l.opp);
-  const rows = Math.max(l.mine.length, l.opp.length);
+  // ESPN and MyFantasyLeague lineups are shown QB, RB, WR, TE, K, DEF, then IDP; other sources keep their own slot order.
+  const byPosition = l.how === 'espn' || l.how === 'mfl';
+  const rows = byPosition ? alignByPosition(l.mine, l.opp)
+    : Array.from({ length: Math.max(l.mine.length, l.opp.length) }, (_, i) => [l.mine[i], l.opp[i]]);
   const hasPts = [...l.mine, ...l.opp].some(p => typeof p.pts === 'number');
   const live = liveNow(week);
   const verdict = mine == null || opp == null || !weekStarted(week) ? '' : live ? 'Live'
@@ -840,17 +844,17 @@ function MatchupSheet({ league, week, lineup, board, onClose }) {
         <div className="mu-mid">{verdict || 'vs'}</div>
         <div className={'mu-team opp' + (lead === 'opp' ? ' lead' : '')}><span className="mu-who">Opponent</span><b>{opp != null ? fmtPts(opp) : '—'}</b></div>
       </div>
-      {rows === 0
+      {rows.length === 0
         ? <p className="sheet-note">No lineup for this week yet. Add starters with Edit, or link this league to Sleeper, ESPN or MyFantasyLeague.</p>
         : <div className="mu-grid">
-            {Array.from({ length: rows }, (_, i) => (
+            {rows.map(([a, b], i) => (
               <div className="mu-row" key={i}>
-                <MatchCell p={l.mine[i]} side="mine" week={week} board={board} />
-                <MatchCell p={l.opp[i]} side="opp" week={week} board={board} />
+                <MatchCell p={a} side="mine" week={week} board={board} />
+                <MatchCell p={b} side="opp" week={week} board={board} />
               </div>
             ))}
           </div>}
-      {rows > 0 && !hasPts && <p className="sheet-note">Player points show up once this league is linked and the games start.</p>}
+      {rows.length > 0 && !hasPts && <p className="sheet-note">Player points show up once this league is linked and the games start.</p>}
       {l.how && <p className="sheet-note">{l.how === 'manual' ? 'Lineups edited by hand' : 'Updated from ' + SRC_NAME[l.how]}{when ? ' · ' + when : ''}</p>}
     </Sheet>
   );
