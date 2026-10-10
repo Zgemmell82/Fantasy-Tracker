@@ -479,3 +479,5 @@ button.lrow:active { background: var(--surface-3); }
 .rc-row.open .rc-n svg { transform: rotate(180deg); }
 .rc-plays { display: flex; flex-direction: column; gap: 8px; padding: 4px 0 12px; animation: drop .25s var(--ease); }
 .rc-plays .play { background: var(--surface-2); }
+
+.mu-flx { grid-column: 1 / -1; margin-bottom: -4px; font-size: 10px; font-weight: 800; letter-spacing: 0.1em; color: var(--faint); }

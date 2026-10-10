@@ -847,8 +847,9 @@ function MatchupSheet({ league, week, lineup, board, onClose }) {
       {rows.length === 0
         ? <p className="sheet-note">No lineup for this week yet. Add starters with Edit, or link this league to Sleeper, ESPN or MyFantasyLeague.</p>
         : <div className="mu-grid">
-            {rows.map(([a, b], i) => (
-              <div className="mu-row" key={i}>
+            {rows.map(([a, b, flex], i) => (
+              <div className={'mu-row' + (flex ? ' flx' : '')} key={i}>
+                {flex && <div className="mu-flx">FLX</div>}
                 <MatchCell p={a} side="mine" week={week} board={board} />
                 <MatchCell p={b} side="opp" week={week} board={board} />
               </div>
