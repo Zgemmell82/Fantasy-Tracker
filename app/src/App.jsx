@@ -3,6 +3,7 @@ import { PLAYERS } from './data.js';
 import { load, save } from './lib/store.js';
 import { SEASON, WEEKS, currentWeek, seedWeek } from './lib/season.js';
 import { cloudState, hydrate, legacyDb, userKey } from './lib/account.js';
+import { leagueRemaining, mondayGames } from './lib/remaining.js';
 import { pullState, pushState, supabase } from './lib/cloud.js';
 import { AuthScreen, NewPassword, SetupNeeded, Splash, useSession } from './Auth.jsx';
 import { mkPlayer } from './lib/teams.js';
@@ -326,10 +327,12 @@ function Tracker({ user, onSignOut }) {
   const { week } = db;
   const wk = db.data[week] || {};
   const scoredWeek = db.scored[week] || {};
-  const { board, error: boardError } = useScoreboard(week, db.espnHelper, screen !== 'leagues');
+  const { board, error: boardError } = useScoreboard(week, db.espnHelper, true);
   const names = namesOf(db);
   const colors = Object.fromEntries(db.leagues.map(l => [l.name, l.color]));
   const colorOf = name => colors[name] || LEAGUE_COLORS[0];
+  const now = Date.now();
+  const remain = Object.fromEntries(names.map(n => [n, leagueRemaining(week, wk[n], board, now)]));
 
   if (cloud.phase === 'loading') return <Splash />;
   if (cloud.phase === 'error') {
@@ -361,10 +364,10 @@ function Tracker({ user, onSignOut }) {
 
       <main className="body" key={screen}>
         {screen === 'games'
-          ? <Games week={week} wk={wk} names={names} scored={scoredWeek} filter={filter} setFilter={setFilter} onToggle={toggleScored} board={board} helper={db.espnHelper} />
+          ? <Games week={week} wk={wk} names={names} remain={remain} scored={scoredWeek} filter={filter} setFilter={setFilter} onToggle={toggleScored} board={board} helper={db.espnHelper} />
           : screen === 'plays'
           ? <PlaysScreen games={groupByGame(week, wk, undefined, names).games} board={board} boardError={boardError} helper={db.espnHelper} scored={scoredWeek} leagues={names} />
-          : <Leagues week={week} wk={wk} leagues={db.leagues} conn={db.conn} account={{ email: user.email, cloud, onSignOut: signOut, canImport: !!legacy && !db.leagues.length, onImport: importLegacy, onRetry: settle }} synced={db.synced} syncing={syncing}
+          : <Leagues week={week} wk={wk} leagues={db.leagues} remain={remain} conn={db.conn} account={{ email: user.email, cloud, onSignOut: signOut, canImport: !!legacy && !db.leagues.length, onImport: importLegacy, onRetry: settle }} synced={db.synced} syncing={syncing}
               onSync={async n => { if (await syncOne(n, week)) flash(n + ' synced'); }}
               onEdit={setEditFor} onConnect={setConnFor} onSettings={setLeagueFor} />}
       </main>
@@ -460,7 +463,7 @@ function StatusPill({ status }) {
   return <span className={'spill' + (status === 'Final' ? ' final' : '')}>{status}</span>;
 }
 
-function Games({ week, wk, names, scored, filter, setFilter, onToggle, board, helper }) {
+function Games({ week, wk, names, remain, scored, filter, setFilter, onToggle, board, helper }) {
   const [pbp, setPbp] = useState(null);
   const { games, bye } = groupByGame(week, wk, undefined, names);
   const shown = games.filter(g => filter === 'all' || g.mine.length);
@@ -487,6 +490,8 @@ function Games({ week, wk, names, scored, filter, setFilter, onToggle, board, he
         </div>
         <div className="sum-foot">{done} of {all.length} checked off</div>
       </div>
+
+      <MondayNight week={week} names={names} remain={remain} board={board} />
 
       <Segmented value={filter} onChange={setFilter} options={[['all', 'All games'], ['mine', 'My players']]} />
 
@@ -540,7 +545,7 @@ function Games({ week, wk, names, scored, filter, setFilter, onToggle, board, he
   );
 }
 
-function Leagues({ week, wk, leagues, conn, synced, syncing, account, onSync, onEdit, onConnect, onSettings }) {
+function Leagues({ week, wk, leagues, remain, conn, synced, syncing, account, onSync, onEdit, onConnect, onSettings }) {
   return (
     <div className="stack">
       {!leagues.length && (
@@ -582,6 +587,7 @@ function Leagues({ week, wk, leagues, conn, synced, syncing, account, onSync, on
                 : <div className="league-vs"><b>{l.mine.length}</b><span>vs</span><b>{l.opp.length}</b></div>}
             </div>
             <div className={'league-status' + (failed ? ' err' : l.how ? ' ok' : '')}><StatusIcon size={14} sw={2.5} /><span>{status}</span></div>
+            <LeftToPlay r={remain[n]} />
             <div className="league-actions">
               {linked && <button className="pill-btn primary" disabled={syncing} onClick={() => onSync(n)}><Icon.refresh size={15} sw={2.5} />Sync</button>}
               <button className={'pill-btn' + (linked ? '' : ' primary')} onClick={() => onEdit(n)}><Icon.pencil size={15} sw={2.5} />Edit</button>
@@ -802,6 +808,75 @@ function ConnectSheet({ league, week, conn, sleeperUser, setSleeperUser, setConn
         </>
       )}
     </Sheet>
+  );
+}
+
+const plural = n => n + (n === 1 ? ' player' : ' players');
+
+// "Left to play" for one league: your starters and your opponent's who still have a game to finish,
+// plus how many of each are in the Monday night game.
+function LeftToPlay({ r }) {
+  if (!r || (!r.mine.total && !r.opp.total)) return null;
+  const cell = (side, who) => {
+    const n = side.left;
+    return (
+      <div className={'left-cell ' + who}>
+        <span className="left-n">{side.total ? n : '—'}</span>
+        <span className="left-l">{who === 'mine' ? 'You' : 'Them'} left{side.live > 0 ? ' · ' + side.live + ' live' : ''}</span>
+      </div>
+    );
+  };
+  const mon = r.monday.mine.length + r.monday.opp.length;
+  return (
+    <div className="left">
+      <div className="left-row" aria-label="Left to play">
+        {cell(r.mine, 'mine')}
+        {cell(r.opp, 'opp')}
+      </div>
+      {r.mine.left + r.opp.left === 0 && <div className="left-done"><Icon.check size={13} sw={3} />Everyone has played</div>}
+      {mon > 0 && (
+        <div className="left-mon" title={'Monday night: ' + plural(r.monday.mine.length) + ' yours, ' + plural(r.monday.opp.length) + ' theirs'}>
+          <Icon.clock size={13} sw={2.5} />Monday night: <b className="mint">{r.monday.mine.length}</b> yours · <b className="coral">{r.monday.opp.length}</b> theirs
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Who is still to play in the Monday night game, for and against, league by league.
+function MondayNight({ week, names, remain, board }) {
+  const colorOf = useLeagueColor();
+  const games = mondayGames(week);
+  if (!games.length) return null;
+  const infos = games.map(g => board[g.a + '@' + g.h]);
+  if (infos.length && infos.every(i => i && i.state === 'post')) return null;
+  const rows = names.map(n => ({ n, m: remain[n] && remain[n].monday })).filter(x => x.m && (x.m.mine.length || x.m.opp.length));
+  const chips = (list, side) => list.length
+    ? list.map(p => <span key={side + p.name + p.team} className={'mnf-chip ' + side}><PosChip pos={p.pos} />{p.name}{games.length > 1 ? <em>{p.team}</em> : null}</span>)
+    : <span className="mnf-none">No one</span>;
+  return (
+    <section className="card mnf" aria-label="Monday night">
+      <div className="mnf-head">
+        <div className="mnf-title"><Icon.clock size={15} sw={2.5} />Monday night</div>
+        <div className="mnf-games">
+          {games.map((g, i) => (
+            <span key={g.a + g.h} className="mnf-game">
+              <TeamLogo team={g.a} size={20} /><b>{g.a}</b><span className="at">@</span><TeamLogo team={g.h} size={20} /><b>{g.h}</b>
+              {infos[i] && infos[i].state === 'in' ? <span className="spill live"><i />{infos[i].detail || 'Live'}</span> : <span className="mnf-time">{g.d.replace(/^Mon /, '')}</span>}
+            </span>
+          ))}
+        </div>
+      </div>
+      {rows.length === 0
+        ? <div className="mnf-empty">None of your starters, or your opponents', are in the Monday night game.</div>
+        : rows.map(({ n, m }) => (
+          <div key={n} className="mnf-row">
+            <span className="ltag" style={{ '--lc': colorOf(n) }}>{n}</span>
+            <div className="mnf-side mine"><b>For you</b><div className="mnf-chips">{chips(m.mine, 'mine')}</div></div>
+            <div className="mnf-side opp"><b>Against you</b><div className="mnf-chips">{chips(m.opp, 'opp')}</div></div>
+          </div>
+        ))}
+    </section>
   );
 }
 
