@@ -357,7 +357,14 @@ button.lrow:active { background: var(--surface-3); }
 .pbadge.b-int, .pbadge.b-fum, .pbadge.b-saf { background: rgba(255, 77, 94, .18); color: var(--live); }
 
 .hits { display: flex; flex-wrap: wrap; gap: 6px; }
-.hit { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 3px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--surface-2); }
+.hit { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; padding: 5px 10px 7px 5px; border-radius: 14px; font-size: 12px; font-weight: 600; background: var(--surface-2); }
+.hit-top { display: flex; align-items: center; gap: 6px; }
+.hit-lgs { display: flex; flex-wrap: wrap; gap: 5px; padding-left: 2px; }
+.lg-chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; color: var(--lc); background: color-mix(in srgb, var(--lc) 15%, transparent); white-space: nowrap; }
+.lg-chip i { width: 6px; height: 6px; border-radius: 50%; background: var(--lc); }
+.lg-chip em { font-style: normal; font-weight: 800; letter-spacing: 0.02em; margin-left: 2px; }
+.lg-chip.mine em { color: var(--mint); }
+.lg-chip.opp em { color: var(--coral); }
 .hit.mine { background: rgba(47, 224, 176, .12); }
 .hit.opp { background: rgba(255, 107, 127, .12); }
 .hit.done { opacity: .6; }
@@ -390,3 +397,11 @@ button.lrow:active { background: var(--surface-3); }
 .account-row { display: flex; align-items: center; gap: 12px; }
 .acct-email { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .acct-offline { color: var(--amber); }
+
+.lg-filter { display: flex; gap: 6px; overflow-x: auto; padding: 1px 0 2px; scrollbar-width: none; }
+.lg-filter::-webkit-scrollbar { display: none; }
+.lg-pick { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 700; color: var(--faint); background: var(--surface); transition: color .2s, background .2s; }
+.lg-pick i { width: 8px; height: 8px; border-radius: 50%; background: var(--surface-3); transition: background .2s; }
+.lg-pick.on { color: var(--lc); background: color-mix(in srgb, var(--lc) 16%, var(--surface)); }
+.lg-pick.on i { background: var(--lc); }
+.feed-empty .text-btn { color: var(--mint); font-weight: 700; }

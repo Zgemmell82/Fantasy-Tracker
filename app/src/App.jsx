@@ -363,7 +363,7 @@ function Tracker({ user, onSignOut }) {
         {screen === 'games'
           ? <Games week={week} wk={wk} names={names} scored={scoredWeek} filter={filter} setFilter={setFilter} onToggle={toggleScored} board={board} helper={db.espnHelper} />
           : screen === 'plays'
-          ? <PlaysScreen games={groupByGame(week, wk, undefined, names).games} board={board} boardError={boardError} helper={db.espnHelper} scored={scoredWeek} />
+          ? <PlaysScreen games={groupByGame(week, wk, undefined, names).games} board={board} boardError={boardError} helper={db.espnHelper} scored={scoredWeek} leagues={names} />
           : <Leagues week={week} wk={wk} leagues={db.leagues} conn={db.conn} account={{ email: user.email, cloud, onSignOut: signOut, canImport: !!legacy && !db.leagues.length, onImport: importLegacy, onRetry: settle }} synced={db.synced} syncing={syncing}
               onSync={async n => { if (await syncOne(n, week)) flash(n + ' synced'); }}
               onEdit={setEditFor} onConnect={setConnFor} onSettings={setLeagueFor} />}
