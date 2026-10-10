@@ -39,3 +39,8 @@ test('works from the other franchise and with a single matchup object', () => {
 test('says so when the franchise has no matchup', () => {
   assert.throws(() => parseMfl(live, roster, '9'), /No week 4 matchup/);
 });
+
+test('also reads the weekly results format', () => {
+  const wr = { weeklyResults: { week: '4', matchup: live.liveScoring.matchup } };
+  assert.equal(parseMfl(wr, roster, '0003').mine.length, 2);
+});

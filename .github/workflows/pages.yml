@@ -33,6 +33,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: node --test ../espn-helper/worker.test.js
+      - run: node --experimental-strip-types --test ../supabase/functions/mfl/index.test.mjs
       - run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}

@@ -741,7 +741,7 @@ function ConnectSheet({ league, week, conn, sleeperUser, setSleeperUser, setConn
           </div>
           <button className="pill-btn primary wide" disabled={busy} onClick={runMfl}>{busy ? 'Connecting…' : 'Test connection'}</button>
           {espnMsg && <div className={'banner ' + (/^Connected/.test(espnMsg) ? 'ok' : 'err')}>{/^Connected/.test(espnMsg) ? <Icon.check size={16} sw={2.5} /> : <Icon.alert size={16} sw={2.5} />}<span>{espnMsg}</span></div>}
-          <p className="sheet-note">On myfantasyleague.com the league ID is in your league's web address (<b>L=</b>) and the franchise ID is your team's number. The API key comes from MFL's Developers page. It's saved on this phone only. Syncs week {week}.</p>
+          <p className="sheet-note">On myfantasyleague.com the league ID is in your league's web address (<b>L=</b>) and the franchise ID is your team's number. The API key comes from MFL's Developers page and is only needed for private leagues. MFL doesn't allow direct access from other sites, so lineups are fetched through your account's MFL helper (set up once; see app/README.md). Syncs week {week}.</p>
         </>
       )}
 

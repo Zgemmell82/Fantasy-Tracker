@@ -4,9 +4,10 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Settings pasted into GitHub often carry quotes, spaces, a trailing slash or an API path; strip those.
+const env = import.meta.env || {};          // empty when the tests run in Node
 const clean = v => String(v || '').trim().replace(/^["']+|["']+$/g, '').trim();
-const url = clean(import.meta.env.VITE_SUPABASE_URL).replace(/\/+$/, '').replace(/\/(rest|auth)\/v1.*$/, '');
-const key = clean(import.meta.env.VITE_SUPABASE_ANON_KEY);
+const url = clean(env.VITE_SUPABASE_URL).replace(/\/+$/, '').replace(/\/(rest|auth)\/v1.*$/, '');
+const key = clean(env.VITE_SUPABASE_ANON_KEY);
 
 export const cloudHost = (() => { try { return new URL(url).host; } catch (e) { return ''; } })();
 
@@ -50,4 +51,18 @@ export async function pullState(userId) {
 export async function pushState(userId, state, at) {
   const { error } = await supabase.from('tracker_state').upsert({ user_id: userId, state, updated_at: new Date(at).toISOString() }, { onConflict: 'user_id' });
   if (error) throw new Error(error.message);
+}
+
+// Reads MyFantasyLeague through the account's "mfl" function. MFL doesn't allow web pages on other
+// sites to call it directly, so the request goes via Supabase (see supabase/functions/mfl).
+export async function mflExport(type, year, params, apiKey) {
+  const { data, error } = await supabase.functions.invoke('mfl', { body: { type, year, params, apiKey: apiKey || undefined } });
+  if (error) {
+    const status = error.context && error.context.status;
+    if (status === 404) throw new Error('The MyFantasyLeague helper isn\'t installed on your Supabase project yet. Add the "mfl" function from supabase/functions/mfl (steps are in app/README.md).');
+    if (status === 401) throw new Error('Your sign-in has expired. Sign out and back in, then try again.');
+    throw new Error('Couldn\'t reach the MyFantasyLeague helper' + (cloudHost ? ' on ' + cloudHost : '') + '. Check your connection and try again.');
+  }
+  if (!data || !data.ok) throw new Error((data && data.error) || 'The MyFantasyLeague helper returned something unexpected.');
+  return data.data;
 }

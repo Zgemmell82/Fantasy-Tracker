@@ -16,6 +16,17 @@ Accounts use [Supabase](https://supabase.com) (free tier). One-time setup:
 4. **Project Settings → API**: copy the **Project URL** and the **anon public** key. (The anon key is meant to be public; the table's row-level security is what protects each account's data. Never use the `service_role` key here.)
 5. In the GitHub repository: **Settings → Secrets and variables → Actions → Variables → New repository variable**, add `SUPABASE_URL` and `SUPABASE_ANON_KEY`, then run the **Deploy app to GitHub Pages** workflow again.
 
+### MyFantasyLeague helper (needed for MFL leagues)
+
+MyFantasyLeague doesn't let other websites read its data from the browser, so MFL leagues are fetched through a small Supabase Edge Function, `mfl`. It only works for signed-in users, only talks to `api.myfantasyleague.com`, and only fetches the few kinds of data the app needs. Install it once:
+
+1. In the Supabase dashboard, open **Edge Functions → Deploy a new function → Via Editor**.
+2. Name it exactly `mfl`.
+3. Replace the sample code with the contents of `supabase/functions/mfl/index.ts`, then **Deploy**. Leave **Verify JWT** on.
+4. In the app: **Leagues → Source → MFL**, enter the league ID and franchise ID (plus an API key if the league is private), and tap **Test connection**.
+
+With the Supabase CLI instead: `supabase functions deploy mfl --project-ref <your project ref>`. After changing `supabase/functions/mfl/index.ts`, deploy it again.
+
 For local work, put the same two values in `app/.env.local` as `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 
 ## Run it
