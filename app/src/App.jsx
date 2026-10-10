@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { PLAYERS } from './data.js';
 import { load, save } from './lib/store.js';
 import { SEASON, WEEKS, currentWeek, seedWeek } from './lib/season.js';
@@ -473,7 +473,12 @@ function StatusPill({ status }) {
 function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter, onToggle, board, helper }) {
   const [pbp, setPbp] = useState(null);
   const { games, bye } = groupByGame(week, wk, undefined, names);
-  const shown = games.filter(g => filter === 'all' || g.mine.length);
+  // A game is over when ESPN says it's final, or, without ESPN, once its kickoff clock has run out.
+  const isOver = g => board[g.key] ? board[g.key].state === 'post' : g.status === 'Final';
+  const picked = games.filter(g => filter === 'all' || g.mine.length);
+  // Games still to play or in progress come first; finished games, with every player done, sink to the bottom.
+  const shown = [...picked.filter(g => !isOver(g)), ...picked.filter(isOver)];
+  const firstOver = shown.length > picked.filter(isOver).length ? shown.find(isOver) : null;   // label only when something is above it
   if (filter === 'all' && (bye.mine.length || bye.theirs.length)) {
     shown.push({ key: 'bye', bye: true, title: 'Bye or unmatched', time: 'No game this week for these teams', status: 'Check', ...bye });
   }
@@ -504,7 +509,9 @@ function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter
       {shown.map(g => {
         const [away, home] = g.bye ? [null, null] : g.key.split('@');
         return (
-          <section key={g.key} className="card game">
+          <Fragment key={g.key}>
+          {g === firstOver && <div className="over-label"><span>Finished</span></div>}
+          <section className="card game">
             <div className="game-head">
               {g.bye
                 ? <div className="matchup"><span className="bye-t">{g.title}</span></div>
@@ -537,6 +544,7 @@ function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter
               </>
             )}
           </section>
+          </Fragment>
         );
       })}
 
