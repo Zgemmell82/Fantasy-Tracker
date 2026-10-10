@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchPlays, fetchScoreboard, matchPlays } from './lib/pbp.js';
 import { fmtPts } from './lib/games.js';
-import { Avatar, Icon, Segmented, TeamLogo, useLeagueColor } from './ui.jsx';
+import { Avatar, Icon, LeagueFilter, Segmented, TeamLogo, useLeagueColor } from './ui.jsx';
 
 const visible = () => document.visibilityState === 'visible';
 
@@ -208,11 +208,9 @@ function useGameFeeds(list, helper, active) {
 
 const SHOW_STEP = 40;
 
-function AllLive({ games, board, helper, scored, leagues }) {
-  const colorOf = useLeagueColor();
+function AllLive({ games, board, helper, scored }) {
   const [scope, setScope] = useState('live');          // live | week
   const [impact, setImpact] = useState('all');          // all | mine | opp | scoring
-  const [off, setOff] = useState([]);                   // leagues switched off
   const [limit, setLimit] = useState(SHOW_STEP);
   const started = games.map(g => ({ g, info: board[g.key] })).filter(x => x.info && x.info.state !== 'pre');
   const liveList = started.filter(x => x.info.state === 'in');
@@ -227,18 +225,14 @@ function AllLive({ games, board, helper, scored, leagues }) {
       const f = feeds.byId[info.id];
       if (!f) return;
       matchPlays(f.plays, trackedFor(g)).forEach(p => {
-        const hits = p.hits
-          .map(h => ({ ...h, leagues: h.leagues.filter(l => !off.includes(l)) }))
-          .filter(h => h.leagues.length && (impact !== 'mine' || h.side === 'mine') && (impact !== 'opp' || h.side === 'opp'));
+        const hits = p.hits.filter(h => (impact !== 'mine' || h.side === 'mine') && (impact !== 'opp' || h.side === 'opp'));
         if (!hits.length || (impact === 'scoring' && !p.scoring)) return;
         out.push({ p: { ...p, hits }, game: { away: f.away || info.away, home: f.home || info.home }, gid: info.id, seen: feeds.seenAt(info.id, p.id) });
       });
     });
     return out.sort((a, b) => (b.seen - a.seen) || (b.p.period - a.p.period) || (clockSecs(a.p.clock) - clockSecs(b.p.clock)) || (b.p.seq - a.p.seq));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feeds.byId, impact, off, scope, board]);
-
-  const toggle = l => { setOff(o => o.includes(l) ? o.filter(x => x !== l) : [...o, l]); setLimit(SHOW_STEP); };
+  }, [feeds.byId, impact, scope, board]);
 
   return (
     <div className="stack">
@@ -248,15 +242,6 @@ function AllLive({ games, board, helper, scored, leagues }) {
             options={[['live', 'Live now' + (liveList.length ? ' · ' + liveList.length : '')], ['week', 'All games this week']]} />
           <Segmented value={impact} onChange={v => { setImpact(v); setLimit(SHOW_STEP); }} tone={v => v === 'opp' ? 'coral' : ''}
             options={[['all', 'All'], ['mine', 'For me'], ['opp', 'Against'], ['scoring', 'Scoring']]} />
-          {leagues.length > 1 && (
-            <div className="lg-filter" role="group" aria-label="Leagues">
-              {leagues.map(l => (
-                <button key={l} className={'lg-pick' + (off.includes(l) ? '' : ' on')} style={{ '--lc': colorOf(l) }} onClick={() => toggle(l)} aria-pressed={!off.includes(l)}>
-                  <i />{l}
-                </button>
-              ))}
-            </div>
-          )}
           <div className="feed-meta">
             {liveList.length > 0 && <i className="dot-live" />}
             {list.length} {scope === 'live' ? 'live' : 'started'} {list.length === 1 ? 'game' : 'games'}{liveList.length ? ' · updates every 20s' : ''}
@@ -287,28 +272,26 @@ function AllLive({ games, board, helper, scored, leagues }) {
 
 const ORDER = { in: 0, pre: 1, post: 2 };
 
-export function PlaysScreen({ games, board, boardError, helper, scored, leagues }) {
+export function PlaysScreen({ games, board, boardError, helper, scored, leagues, sel, onSel }) {
   const [open, setOpen] = useState(null);
   const [view, setView] = useState('games');
   const list = games
     .map(g => ({ g, info: board[g.key] }))
     .sort((a, b) => (ORDER[a.info ? a.info.state : 'pre'] - ORDER[b.info ? b.info.state : 'pre']));
 
-  if (!list.length) {
-    return (
-      <div className="card empty">
-        <Icon.activity size={28} />
-        <div className="empty-t">No games with your players</div>
-        <div className="empty-d">Once your leagues have lineups for this week, their games show up here.</div>
-      </div>
-    );
-  }
-
   const nLive = list.filter(x => x.info && x.info.state === 'in').length;
 
   return (
     <div className="stack">
       <Segmented value={view} onChange={setView} options={[['games', 'By game'], ['all', 'All plays' + (nLive ? ' · ' + nLive + ' live' : '')]]} />
+      <LeagueFilter leagues={leagues} sel={sel} onChange={onSel} />
+      {!list.length && (
+        <div className="card empty">
+          <Icon.activity size={28} />
+          <div className="empty-t">{sel.length ? 'No games for these leagues' : 'No games with your players'}</div>
+          <div className="empty-d">{sel.length ? 'Pick more leagues above, or choose All leagues.' : 'Once your leagues have lineups for this week, their games show up here.'}</div>
+        </div>
+      )}
       {boardError && <div className="banner err"><Icon.alert size={16} sw={2.5} /><span>{boardError} Scores and plays will show once ESPN is reachable.</span></div>}
       {view === 'all' && <AllLive games={games} board={board} helper={helper} scored={scored} leagues={leagues} />}
       {view === 'games' && list.map(({ g, info }) => {

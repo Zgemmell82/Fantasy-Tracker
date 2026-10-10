@@ -3,11 +3,11 @@ import { PLAYERS } from './data.js';
 import { load, save } from './lib/store.js';
 import { SEASON, WEEKS, currentWeek, seedWeek } from './lib/season.js';
 import { cloudState, hydrate, legacyDb, userKey } from './lib/account.js';
-import { leagueRemaining } from './lib/remaining.js';
+import { gameFor, gameState, leagueRemaining } from './lib/remaining.js';
 import { pullState, pushState, supabase } from './lib/cloud.js';
 import { AuthScreen, NewPassword, SetupNeeded, Splash, useSession } from './Auth.jsx';
 import { mkPlayer } from './lib/teams.js';
-import { Avatar, Icon, LEAGUE_COLORS, LeagueColors, PosChip, Segmented, Sheet, Switch, TeamLogo, useLeagueColor } from './ui.jsx';
+import { Avatar, Icon, LEAGUE_COLORS, LeagueColors, LeagueFilter, PosChip, Segmented, Sheet, Switch, TeamLogo, useLeagueColor } from './ui.jsx';
 import { fmtPts, groupByGame, liveNow, weekStarted } from './lib/games.js';
 import { matchSleeperLeague, sleeperLeagues, syncSleeper } from './lib/sleeper.js';
 import { syncEspn } from './lib/espn.js';
@@ -161,6 +161,8 @@ function Tracker({ user, onSignOut }) {
   const [editFor, setEditFor] = useState(null);
   const [connFor, setConnFor] = useState(null);
   const [leagueFor, setLeagueFor] = useState(null);
+  const [matchupFor, setMatchupFor] = useState(null);
+  const [lgSel, setLgSel] = useState([]);       // leagues chosen in the filter; empty = all leagues
   const [syncing, setSyncing] = useState(false);
   const [toast, setToast] = useState('');
   const syncingRef = useRef(false);
@@ -329,6 +331,8 @@ function Tracker({ user, onSignOut }) {
   const scoredWeek = db.scored[week] || {};
   const { board, error: boardError } = useScoreboard(week, db.espnHelper, true);
   const names = namesOf(db);
+  const sel = lgSel.filter(n => names.includes(n));
+  const shown = sel.length ? names.filter(n => sel.includes(n)) : names;
   const colors = Object.fromEntries(db.leagues.map(l => [l.name, l.color]));
   const colorOf = name => colors[name] || LEAGUE_COLORS[0];
   const now = Date.now();
@@ -364,10 +368,10 @@ function Tracker({ user, onSignOut }) {
 
       <main className="body" key={screen}>
         {screen === 'games'
-          ? <Games week={week} wk={wk} names={names} scored={scoredWeek} filter={filter} setFilter={setFilter} onToggle={toggleScored} board={board} helper={db.espnHelper} />
+          ? <Games week={week} wk={wk} names={shown} leagues={names} sel={sel} onSel={setLgSel} scored={scoredWeek} filter={filter} setFilter={setFilter} onToggle={toggleScored} board={board} helper={db.espnHelper} />
           : screen === 'plays'
-          ? <PlaysScreen games={groupByGame(week, wk, undefined, names).games} board={board} boardError={boardError} helper={db.espnHelper} scored={scoredWeek} leagues={names} />
-          : <Leagues week={week} wk={wk} leagues={db.leagues} remain={remain} conn={db.conn} account={{ email: user.email, cloud, onSignOut: signOut, canImport: !!legacy && !db.leagues.length, onImport: importLegacy, onRetry: settle }} synced={db.synced} syncing={syncing}
+          ? <PlaysScreen games={groupByGame(week, wk, undefined, shown).games} board={board} boardError={boardError} helper={db.espnHelper} scored={scoredWeek} leagues={names} sel={sel} onSel={setLgSel} />
+          : <Leagues week={week} wk={wk} leagues={db.leagues} remain={remain} onMatchup={setMatchupFor} conn={db.conn} account={{ email: user.email, cloud, onSignOut: signOut, canImport: !!legacy && !db.leagues.length, onImport: importLegacy, onRetry: settle }} synced={db.synced} syncing={syncing}
               onSync={async n => { if (await syncOne(n, week)) flash(n + ' synced'); }}
               onEdit={setEditFor} onConnect={setConnFor} onSettings={setLeagueFor} />}
       </main>
@@ -390,6 +394,8 @@ function Tracker({ user, onSignOut }) {
         testMfl={async c => { const res = await syncMfl(c.leagueId, c.teamId, week, c.apiKey); setLeague(week, connFor, res, 'mfl'); markSynced(connFor + ':' + week, { ok: true }); return res; }}
         testEspn={async c => { const res = await syncEspnFor(c, week, db.espnHelper); setLeague(week, connFor, res, 'espn'); markSynced(connFor + ':' + week, { ok: true }); return res; }}
         onClose={closeConn} />}
+
+      {matchupFor && db.leagues.some(l => l.name === matchupFor) && <MatchupSheet league={matchupFor} week={week} lineup={wk[matchupFor]} board={board} onClose={() => setMatchupFor(null)} />}
 
       {leagueFor && <LeagueSheet key={leagueFor.name || '+'} league={leagueFor.name} leagues={db.leagues}
         onSave={(f) => {
@@ -463,7 +469,7 @@ function StatusPill({ status }) {
   return <span className={'spill' + (status === 'Final' ? ' final' : '')}>{status}</span>;
 }
 
-function Games({ week, wk, names, scored, filter, setFilter, onToggle, board, helper }) {
+function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter, onToggle, board, helper }) {
   const [pbp, setPbp] = useState(null);
   const { games, bye } = groupByGame(week, wk, undefined, names);
   const shown = games.filter(g => filter === 'all' || g.mine.length);
@@ -492,6 +498,7 @@ function Games({ week, wk, names, scored, filter, setFilter, onToggle, board, he
       </div>
 
       <Segmented value={filter} onChange={setFilter} options={[['all', 'All games'], ['mine', 'My players']]} />
+      <LeagueFilter leagues={leagues} sel={sel} onChange={onSel} />
 
       {shown.map(g => {
         const [away, home] = g.bye ? [null, null] : g.key.split('@');
@@ -543,7 +550,7 @@ function Games({ week, wk, names, scored, filter, setFilter, onToggle, board, he
   );
 }
 
-function Leagues({ week, wk, leagues, remain, conn, synced, syncing, account, onSync, onEdit, onConnect, onSettings }) {
+function Leagues({ week, wk, leagues, remain, onMatchup, conn, synced, syncing, account, onSync, onEdit, onConnect, onSettings }) {
   return (
     <div className="stack">
       {!leagues.length && (
@@ -577,12 +584,15 @@ function Leagues({ week, wk, leagues, remain, conn, synced, syncing, account, on
                   {c.source === 'espn' && c.private ? <> · <Icon.lock size={11} sw={2.5} /> Private</> : null}
                 </div>
               </div>
-              {l.score && l.score.mine != null && weekStarted(week)
-                ? <div className={'league-score' + (l.score.mine > l.score.opp ? ' up' : l.score.mine < l.score.opp ? ' down' : '')}>
-                    <b>{fmtPts(l.score.mine)}</b><span>–</span><b>{l.score.opp != null ? fmtPts(l.score.opp) : '—'}</b>
-                    <em>{liveNow(week) ? 'Live' : l.score.mine > l.score.opp ? 'Winning' : l.score.mine < l.score.opp ? 'Losing' : 'Tied'}</em>
-                  </div>
-                : <div className="league-vs"><b>{l.mine.length}</b><span>vs</span><b>{l.opp.length}</b></div>}
+              <button className="score-btn" onClick={() => onMatchup(n)} aria-label={'Matchup breakdown for ' + n}>
+                {l.score && l.score.mine != null && weekStarted(week)
+                  ? <div className={'league-score' + (l.score.mine > l.score.opp ? ' up' : l.score.mine < l.score.opp ? ' down' : '')}>
+                      <b>{fmtPts(l.score.mine)}</b><span>–</span><b>{l.score.opp != null ? fmtPts(l.score.opp) : '—'}</b>
+                      <em>{liveNow(week) ? 'Live' : l.score.mine > l.score.opp ? 'Winning' : l.score.mine < l.score.opp ? 'Losing' : 'Tied'}</em>
+                    </div>
+                  : <div className="league-vs"><b>{l.mine.length}</b><span>vs</span><b>{l.opp.length}</b></div>}
+                <span className="score-go" aria-hidden="true"><Icon.chevron size={16} sw={2.5} /></span>
+              </button>
             </div>
             <div className={'league-status' + (failed ? ' err' : l.how ? ' ok' : '')}><StatusIcon size={14} sw={2.5} /><span>{status}</span></div>
             <LeftToPlay r={remain[n]} />
@@ -806,6 +816,64 @@ function ConnectSheet({ league, week, conn, sleeperUser, setSleeperUser, setConn
         </>
       )}
     </Sheet>
+  );
+}
+
+// The week's matchup for one league, like the other fantasy apps: both teams' scores, then the starters side by side with points.
+function MatchupSheet({ league, week, lineup, board, onClose }) {
+  const l = lineup || { mine: [], opp: [] };
+  const pts = list => list.some(p => typeof p.pts === 'number') ? list.reduce((n, p) => n + (p.pts || 0), 0) : null;
+  const mine = l.score && l.score.mine != null ? l.score.mine : pts(l.mine);
+  const opp = l.score && l.score.opp != null ? l.score.opp : pts(l.opp);
+  const rows = Math.max(l.mine.length, l.opp.length);
+  const hasPts = [...l.mine, ...l.opp].some(p => typeof p.pts === 'number');
+  const live = liveNow(week);
+  const verdict = mine == null || opp == null || !weekStarted(week) ? '' : live ? 'Live'
+    : mine > opp ? 'Winning' : mine < opp ? 'Losing' : 'Tied';
+  const lead = mine != null && opp != null ? (mine > opp ? 'mine' : opp > mine ? 'opp' : '') : '';
+  const when = l.at ? new Date(l.at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '';
+
+  return (
+    <Sheet title={league} subtitle={'Week ' + week + ' matchup'} onClose={onClose} label={'Matchup for ' + league}>
+      <div className="mu-score">
+        <div className={'mu-team mine' + (lead === 'mine' ? ' lead' : '')}><span className="mu-who">You</span><b>{mine != null ? fmtPts(mine) : '—'}</b></div>
+        <div className="mu-mid">{verdict || 'vs'}</div>
+        <div className={'mu-team opp' + (lead === 'opp' ? ' lead' : '')}><span className="mu-who">Opponent</span><b>{opp != null ? fmtPts(opp) : '—'}</b></div>
+      </div>
+      {rows === 0
+        ? <p className="sheet-note">No lineup for this week yet. Add starters with Edit, or link this league to Sleeper, ESPN or MyFantasyLeague.</p>
+        : <div className="mu-grid">
+            {Array.from({ length: rows }, (_, i) => (
+              <div className="mu-row" key={i}>
+                <MatchCell p={l.mine[i]} side="mine" week={week} board={board} />
+                <MatchCell p={l.opp[i]} side="opp" week={week} board={board} />
+              </div>
+            ))}
+          </div>}
+      {rows > 0 && !hasPts && <p className="sheet-note">Player points show up once this league is linked and the games start.</p>}
+      {l.how && <p className="sheet-note">{l.how === 'manual' ? 'Lineups edited by hand' : 'Updated from ' + SRC_NAME[l.how]}{when ? ' · ' + when : ''}</p>}
+    </Sheet>
+  );
+}
+
+// One starter in the matchup: photo, name, position and team, and either their points or when they play.
+function MatchCell({ p, side, week, board }) {
+  if (!p) return <div className="mu-cell empty" />;
+  const g = gameFor(week, p.team);
+  const state = g ? gameState(g, board) : null;
+  const time = g && state === 'pre' ? ((/^(\w{3})/.exec(g.d) || [])[1] || '') + ' ' + ((/(\d+:\d+) ([AP])M/.exec(g.d) || []).slice(1).join('').toLowerCase()) : '';
+  const has = typeof p.pts === 'number';
+  return (
+    <div className={'mu-cell ' + side}>
+      <Avatar p={p} size={30} side={side} />
+      <div className="mu-main">
+        <span className="mu-name">{p.name}</span>
+        <span className="mu-meta"><PosChip pos={p.pos} /><span>{p.team}</span>
+          {!g ? <em>Bye</em> : state === 'in' ? <em className="live"><i />Live</em> : state === 'pre' ? <em>{time}</em> : <em>Final</em>}
+        </span>
+      </div>
+      <b className={'mu-pts' + (has ? '' : ' none')}>{has ? fmtPts(p.pts) : '—'}</b>
+    </div>
   );
 }
 

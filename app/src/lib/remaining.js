@@ -15,6 +15,9 @@ export function gameState(g, board, now = Date.now()) {
   return now < t ? 'pre' : now < t + 3.5 * 3600000 ? 'in' : 'post';
 }
 
+// The scheduled game a team plays in a week (undefined on a bye).
+export const gameFor = (week, team) => SCHEDULE_ALL.find(g => g.w === week && (g.a === normTeam(team) || g.h === normTeam(team)));
+
 // One side's starters: how many still have a game to finish (not yet final), and how many of those are playing now.
 // Players on a bye have no game, so they are never "left".
 function side(players, byTeam, board, now) {

@@ -48,6 +48,29 @@ export function PosChip({ pos }) {
 export { LEAGUE_COLORS };
 export const leagueColor = (name, all) => LEAGUE_COLORS[Math.max(0, all.indexOf(name)) % LEAGUE_COLORS.length];
 
+// League filter chips. sel lists the chosen leagues; empty means all leagues. Tap leagues to add or drop them.
+export function LeagueFilter({ leagues, sel, onChange }) {
+  const colorOf = useLeagueColor();
+  if (leagues.length < 2) return null;
+  const toggle = l => {
+    const next = sel.includes(l) ? sel.filter(x => x !== l) : [...sel, l];
+    onChange(next.length === leagues.length ? [] : next);
+  };
+  return (
+    <div className="lg-filter" role="group" aria-label="Filter by league">
+      <button className={'lg-pick all' + (!sel.length ? ' on' : '')} style={{ '--lc': '#eef1f7' }} onClick={() => onChange([])} aria-pressed={!sel.length}>All leagues</button>
+      {leagues.map(l => {
+        const on = !sel.length || sel.includes(l);
+        return (
+          <button key={l} className={'lg-pick' + (on ? ' on' : '') + (sel.length && on ? ' picked' : '')} style={{ '--lc': colorOf(l) }} onClick={() => toggle(l)} aria-pressed={sel.includes(l)}>
+            <i />{l}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // Each league's chosen colour, provided by App so tags and dots anywhere can look it up by name.
 export const LeagueColors = createContext(name => LEAGUE_COLORS[0]);
 export const useLeagueColor = () => useContext(LeagueColors);
