@@ -243,7 +243,7 @@ export function GameScore({ game, info }) {
 }
 
 export function GameStatus({ game, info }) {
-  if (info && info.state === 'in') return <span className="spill live"><i />{info.detail || 'Live'}</span>;
+  if (info && info.state === 'in') return <span className="spill-wrap"><span className="spill live"><i />{info.detail || 'Live'}</span>{info.redZone && info.possession && <span className="spill rz" title="In the red zone">RZ · {info.possession}</span>}</span>;
   if (info && info.state === 'post') return <span className="spill final">{info.detail || 'Final'}</span>;
   return <span className="spill">{info ? info.detail : game.status}</span>;
 }

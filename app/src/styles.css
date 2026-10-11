@@ -670,3 +670,24 @@ button.lrow:active { background: var(--surface-3); }
 .lc-h.good i { width: 8px; height: 8px; border-radius: 50%; background: var(--mint); }
 .lc-more { width: 100%; }
 .lc-chip { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--amber); }
+
+/* Win chance timeline */
+.hr-tl-btn { background: none; border: 0; color: var(--accent, #34d399); font: inherit; font-size: 12.5px; font-weight: 600; padding: 8px 0 0; cursor: pointer; }
+.hr-tl { margin-top: 8px; }
+.hr-tl svg { width: 100%; height: 70px; display: block; }
+.tl-mid { stroke: currentColor; opacity: .18; stroke-dasharray: 3 4; }
+.tl-line { stroke: var(--accent, #34d399); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.tl-up { fill: #34d399; } .tl-down { fill: #f87171; }
+.tl-axis { display: flex; justify-content: space-between; font-size: 11.5px; opacity: .65; margin-top: 2px; }
+.tl-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; font-size: 12.5px; }
+.tl-list li { display: flex; gap: 8px; align-items: baseline; }
+.tl-list li b { min-width: 42px; font-variant-numeric: tabular-nums; }
+.tl-list li.up b { color: #34d399; } .tl-list li.down b { color: #f87171; }
+
+/* Red zone and projections */
+.spill-wrap { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.spill.rz { background: rgba(248, 113, 113, .16); color: #f87171; font-weight: 700; }
+.flag.rz { background: rgba(248, 113, 113, .16); color: #f87171; }
+.mu-right { display: grid; justify-items: end; gap: 1px; }
+.mu-proj, .mu-pj { font-size: 11px; opacity: .6; font-variant-numeric: tabular-nums; font-weight: 500; }
+.mu-team .mu-pj { display: block; }

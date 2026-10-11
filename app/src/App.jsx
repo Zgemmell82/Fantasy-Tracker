@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PLAYERS } from './data.js';
 import { load, save } from './lib/store.js';
 import { SEASON, WEEKS, currentWeek, seedWeek } from './lib/season.js';
@@ -20,7 +20,9 @@ import { syncYahoo, yahooLeagues, startYahooSignIn, yahooStatus, yahooDisconnect
 import { takeYahooCode } from './lib/yahoo-return.js';
 import { Feed, GameStatus, PlaysScreen, useScoreboard } from './Plays.jsx';
 import { boardFor } from './lib/pbp.js';
-import HotRoute from './HotRoute.jsx';
+import HotRoute, { useProjections } from './HotRoute.jsx';
+import { leagueOutlook } from './lib/hotroute.js';
+import { normTeam } from './lib/teams.js';
 
 function syncEspnFor(c, week, helper) {
   if (c.private && !helper) return Promise.reject(new Error('Private league: add your ESPN helper link under Connect.'));
@@ -490,13 +492,13 @@ function TagList({ leagues, pts, showPts }) {
   );
 }
 
-function PlayerRow({ p, side, done, showPts, onToggle, flag }) {
+function PlayerRow({ p, side, done, showPts, onToggle, flag, rz }) {
   return (
     <button className={'prow' + (done ? ' done' : '')} onClick={onToggle} aria-pressed={done}>
       <Avatar p={p} side={side} />
       <span className="prow-main">
         <span className="prow-name">{p.name}</span>
-        <span className="prow-meta"><PosChip pos={p.pos} /><span>{p.team}</span>{flag && <Flag a={flag} />}</span>
+        <span className="prow-meta"><PosChip pos={p.pos} /><span>{p.team}</span>{rz && <em className="flag rz" title="His team is in the red zone">RZ</em>}{flag && <Flag a={flag} />}</span>
       </span>
       <TagList leagues={p.leagues} pts={p.pts} showPts={showPts} />
       <span className="prow-check" aria-hidden="true">{done ? <Icon.check size={14} sw={3} /> : null}</span>
@@ -543,6 +545,9 @@ function LineupCheck({ alerts, ready, error }) {
     </section>
   );
 }
+
+// True while a player's team has the ball in the red zone (his team is the one in possession).
+const inRz = (board, g, p) => { const i = !g.bye && boardFor(board, g.key); return !!(i && i.state === 'in' && i.redZone && i.possession && i.possession === normTeam(p.team)); };
 
 function StatusPill({ status }) {
   if (status === 'Live') return <span className="spill live"><i />Live</span>;
@@ -608,13 +613,13 @@ function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter
             {g.mine.length > 0 && (
               <div className="side">
                 <div className="side-h mint"><i />Your players</div>
-                {g.mine.map(p => { const auto = g.status === 'Final' && !!p.pts; return <PlayerRow key={p.uid} p={p} side="mine" flag={flags[alertKey("mine", p)]} showPts={g.status !== 'Upcoming'} done={isDone(scored[p.uid], auto)} onToggle={() => onToggle(p.uid, auto)} />; })}
+                {g.mine.map(p => { const auto = g.status === 'Final' && !!p.pts; return <PlayerRow key={p.uid} p={p} side="mine" rz={inRz(board, g, p)} flag={flags[alertKey("mine", p)]} showPts={g.status !== 'Upcoming'} done={isDone(scored[p.uid], auto)} onToggle={() => onToggle(p.uid, auto)} />; })}
               </div>
             )}
             {g.theirs.length > 0 && (
               <div className="side">
                 <div className="side-h coral"><i />Against you</div>
-                {g.theirs.map(p => { const auto = g.status === 'Final' && !!p.pts; return <PlayerRow key={p.uid} p={p} side="opp" flag={flags[alertKey("opp", p)]} showPts={g.status !== 'Upcoming'} done={isDone(scored[p.uid], auto)} onToggle={() => onToggle(p.uid, auto)} />; })}
+                {g.theirs.map(p => { const auto = g.status === 'Final' && !!p.pts; return <PlayerRow key={p.uid} p={p} side="opp" rz={inRz(board, g, p)} flag={flags[alertKey("opp", p)]} showPts={g.status !== 'Upcoming'} done={isDone(scored[p.uid], auto)} onToggle={() => onToggle(p.uid, auto)} />; })}
               </div>
             )}
             {!g.bye && (
@@ -975,6 +980,14 @@ function ConnectSheet({ league, week, conn, sleeperUser, setSleeperUser, setConn
 // The week's matchup for one league, like the other fantasy apps: both teams' scores, then the starters side by side with points.
 function MatchupSheet({ league, week, lineup, board, onClose }) {
   const l = lineup || { mine: [], opp: [] };
+  const proj = useProjections(week);
+  const outlook = useMemo(() => leagueOutlook(week, l, board, undefined, proj.lookup), [week, l, board, proj.lookup]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // Each starter's projected finish (points so far + what's left in his projection), by player.
+  const finish = useMemo(() => {
+    const m = new Map();
+    [...outlook.mine, ...outlook.opp].forEach(x => m.set(x.p, { total: (typeof x.p.pts === 'number' ? x.p.pts : 0) + x.mean, left: x.f > 0, real: x.projected }));
+    return m;
+  }, [outlook]);
   const pts = list => list.some(p => typeof p.pts === 'number') ? list.reduce((n, p) => n + (p.pts || 0), 0) : null;
   const mine = l.score && l.score.mine != null ? l.score.mine : pts(l.mine);
   const opp = l.score && l.score.opp != null ? l.score.opp : pts(l.opp);
@@ -992,9 +1005,9 @@ function MatchupSheet({ league, week, lineup, board, onClose }) {
   return (
     <Sheet title={league} subtitle={'Week ' + week + ' matchup'} onClose={onClose} label={'Matchup for ' + league}>
       <div className="mu-score">
-        <div className={'mu-team mine' + (lead === 'mine' ? ' lead' : '')}><span className="mu-who">You</span><b>{mine != null ? fmtPts(mine) : '—'}</b></div>
+        <div className={'mu-team mine' + (lead === 'mine' ? ' lead' : '')}><span className="mu-who">You</span><b>{mine != null ? fmtPts(mine) : '—'}</b>{!outlook.done && !outlook.approx && <span className="mu-pj">proj {(outlook.me + outlook.mine.reduce((n, x) => n + x.mean, 0)).toFixed(1)}</span>}</div>
         <div className="mu-mid">{verdict || 'vs'}</div>
-        <div className={'mu-team opp' + (lead === 'opp' ? ' lead' : '')}><span className="mu-who">Opponent</span><b>{opp != null ? fmtPts(opp) : '—'}</b></div>
+        <div className={'mu-team opp' + (lead === 'opp' ? ' lead' : '')}><span className="mu-who">Opponent</span><b>{opp != null ? fmtPts(opp) : '—'}</b>{!outlook.done && !outlook.approx && <span className="mu-pj">proj {(outlook.them + outlook.opp.reduce((n, x) => n + x.mean, 0)).toFixed(1)}</span>}</div>
       </div>
       {rows.length === 0
         ? <p className="sheet-note">No lineup for this week yet. Add starters with Edit, or link this league to Sleeper, ESPN or MyFantasyLeague.</p>
@@ -1002,8 +1015,8 @@ function MatchupSheet({ league, week, lineup, board, onClose }) {
             {rows.map(([a, b, flex], i) => (
               <div className={'mu-row' + (flex ? ' flx' : '')} key={i}>
                 {flex && <div className="mu-flx">FLX</div>}
-                <MatchCell p={a} side="mine" week={week} board={board} />
-                <MatchCell p={b} side="opp" week={week} board={board} />
+                <MatchCell p={a} side="mine" week={week} board={board} fin={finish.get(a)} />
+                <MatchCell p={b} side="opp" week={week} board={board} fin={finish.get(b)} />
               </div>
             ))}
           </div>}
@@ -1014,7 +1027,7 @@ function MatchupSheet({ league, week, lineup, board, onClose }) {
 }
 
 // One starter in the matchup: photo, name, position and team, and either their points or when they play.
-function MatchCell({ p, side, week, board }) {
+function MatchCell({ p, side, week, board, fin }) {
   if (!p) return <div className="mu-cell empty" />;
   const g = gameFor(week, p.team);
   const state = g ? gameState(g, board) : null;
@@ -1027,9 +1040,13 @@ function MatchCell({ p, side, week, board }) {
         <span className="mu-name">{p.name}</span>
         <span className="mu-meta"><PosChip pos={p.pos} /><span>{p.team}</span>
           {!g ? <em>Bye</em> : state === 'in' ? <em className="live"><i />Live</em> : state === 'pre' ? <em>{time}</em> : <em>Final</em>}
+          {g && inRz(board, { key: g.a + '@' + g.h }, p) && <em className="flag rz">RZ</em>}
         </span>
       </div>
-      <b className={'mu-pts' + (has ? '' : ' none')}>{has ? fmtPts(p.pts) : '—'}</b>
+      <span className="mu-right">
+        <b className={'mu-pts' + (has ? '' : ' none')}>{has ? fmtPts(p.pts) : '—'}</b>
+        {fin && fin.left && <span className="mu-proj" title={fin.real ? "Sleeper's projection" : 'Position average'}>proj {fin.total.toFixed(1)}{fin.real ? '' : '~'}</span>}
+      </span>
     </div>
   );
 }
