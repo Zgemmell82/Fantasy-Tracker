@@ -198,7 +198,7 @@ export default function Radio({ week, wk, shown, board, helper, hr }) {
       <p className="radio-foot">
         {!canSpeak ? 'This browser can\'t speak, so you\'ll get captions. ' : 'Built-in voices; keep the screen on while it plays. '}
         {ai === 'on' ? 'Big moments are written live by AI. ' : ai === 'setup' ? 'AI banter isn\'t set up yet, so the hosts use built-in lines. ' : ai === 'off' ? 'AI banter is unavailable right now; using built-in lines. ' : 'Big moments use AI banter when it\'s set up. '}
-        Commentary is generated from your app data and isn't betting advice.
+        Commentary comes from your app data and a short list of checked season storylines. It isn't betting advice.
       </p>
     </section>
   );

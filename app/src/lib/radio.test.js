@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { STYLES, STYLE_KEYS, compose, composePlay, composeRundown, createDirector, importanceOf, snapshotFacts } from './radio.js';
+import { STYLES, STYLE_KEYS, compose, composeLore, composeNeed, composePlay, composeRundown, createDirector, importanceOf, snapshotFacts } from './radio.js';
+import { LORE } from './lore.js';
 import { hotRoute } from './hotroute.js';
 
 const rnd = () => 0;
@@ -100,4 +101,70 @@ test('importance follows the badge and the size of the swing', () => {
   assert.equal(importanceOf({ badge: 'FG', hits: [hit('x', 'mine', 1)] }), 2);
   assert.equal(importanceOf({ badge: '', hits: [hit('x', 'mine', 3.5)] }), 2);
   assert.equal(importanceOf({ badge: '', hits: [hit('x', 'mine', 0.5)] }), 1);
+});
+
+const sweep = (fn, n = 40) => Array.from({ length: n }, (_, i) => fn(() => i / n));
+
+test('there is plenty of variety: many different reactions per style and mood', () => {
+  STYLE_KEYS.forEach(k => {
+    ['good', 'bad', 'mixed'].forEach(m => {
+      const f = { hits: [hit('X', m === 'bad' ? 'opp' : 'mine', m === 'mixed' ? 0 : 5)] };
+      const seen = new Set(sweep(r => composePlay(f, k, false, names, r)[2].text));
+      assert.ok(seen.size >= 6, k + ' ' + m + ' only has ' + seen.size);
+    });
+  });
+});
+
+test('nothing outside the spicy roast contains profanity, and nothing ever contains strong language', () => {
+  const MILD = /\b(damn\w*|hell|crap|ass)\b/i, STRONG = /\b(fuck\w*|shit\w*|bitch\w*|asshole|cunt|bastard|nigg\w*|fag\w*|retard\w*)\b/i;
+  const { facts } = live();
+  const segs = [
+    ...[-5, 0, 5].flatMap(est => ['mine', 'opp'].map(side => ({ kind: 'play', facts: { badge: 'TD', text: 'x for 9 yards', hits: [hit('X', side, est)], impact: [{ name: 'A', wp: 0.2 }] } }))),
+    { kind: 'rundown', facts }, { kind: 'need', facts: { league: facts.leagues[0] } }, { kind: 'rootcall', facts }, { kind: 'intro', facts },
+    { kind: 'outro', facts: { ...facts, leagues: facts.leagues.map(l => ({ ...l, done: true })) } },
+    { kind: 'lore', facts: { item: LORE[0], mention: [], relevant: true } }
+  ];
+  const said = (style, spicy) => segs.flatMap(sg => sweep(r => compose(sg, style, spicy, names, r).map(l => l.text).join(' '), 30)).join(' ');
+  STYLE_KEYS.forEach(k => {
+    assert.doesNotMatch(said(k, false), MILD, k);
+    assert.doesNotMatch(said(k, true), STRONG, k);
+    if (k !== 'roast') assert.doesNotMatch(said(k, true), MILD, k + ' spicy flag has no effect outside roast');
+  });
+});
+
+test('stakes are worded for how the league stands', () => {
+  const play = wp => composePlay({ text: 'x', hits: [hit('X', 'mine', 5)], impact: [{ name: 'Alpha', wp }] }, 'neutral', false, names, rnd)[3].text;
+  assert.match(play(0.9), /clear favorite.*90/);
+  assert.match(play(0.5), /close.*50/);
+  assert.match(play(0.2), /underdog.*20/);
+});
+
+test('a flashback names your players when they are in the story, and the director tells each storyline once', () => {
+  const lines = composeLore({ item: LORE.find(i => i.id === 'w4-car-det'), mention: ['Tetairoa McMillan'], relevant: true }, 'neutral', false, names, rnd);
+  assert.match(lines[0].text, /14 passes for 192 yards/);
+  assert.match(lines[1].text, /Tetairoa McMillan is in your leagues/);
+  const f = { ...live().facts, week: 5, teams: ['LA'], names: ['puka nacua'] };
+  const d = createDirector({ rundownEvery: 1e12, fillerEvery: 100 });
+  const T = 1e6; const snap = { facts: f, live: 1 };
+  d.next(T, snap);
+  const kinds = []; const told = [];
+  for (let i = 1; i <= 20; i++) { const sg = d.next(T + i * 200000, snap); if (sg) { kinds.push(sg.kind); if (sg.kind === 'lore') told.push(sg.facts.item.id); } }
+  assert.ok(kinds.includes('lore'));
+  assert.equal(new Set(told).size, told.length);                           // never the same storyline twice
+  assert.equal(told[0], 'w4-lar-nacua');                                   // the first one is about a team and player you have
+});
+
+test('the need segment is phrased several ways', () => {
+  const l = { name: 'Alpha', diff: -11, exp: -4, wp: 0.3, leftMine: 1, leftOpp: 0, helpers: ['Adams'], threats: [] };
+  assert.ok(new Set(sweep(r => composeNeed({ league: l }, 'neutral', false, names, r).map(x => x.text).join('|'), 30)).size >= 6);
+});
+
+test('the root-for callout is not repeated every couple of minutes', () => {
+  const d = createDirector({ rundownEvery: 1e12, fillerEvery: 100 });
+  const snap = { facts: live().facts, live: 1 };
+  const T = 1e6;
+  d.next(T, snap);
+  const kinds = [];
+  for (let i = 1; i <= 12; i++) { const sg = d.next(T + i * 30000, snap); if (sg) kinds.push(sg.kind); }
+  assert.ok(kinds.filter(k => k === 'rootcall').length <= 2, kinds.join(','));      // 6 minutes: at most twice
 });
