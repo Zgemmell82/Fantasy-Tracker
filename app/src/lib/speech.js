@@ -10,12 +10,23 @@ const MALE = ['daniel', 'alex', 'fred', 'tom', 'guy', 'david', 'mark', 'oliver',
 const english = voices => voices.filter(v => /^en([-_]|$)/i.test(v.lang || ''));
 const named = (list, tokens) => list.find(v => tokens.some(t => String(v.name).toLowerCase().includes(t)));
 
-// Two voices, preferably one that sounds female and one male. shared is true when the device has only one voice.
+// Better-sounding voices say so in their name (iPhone "Premium"/"Enhanced", Edge and Chrome "Natural"/"Online"/"Neural").
+const QUALITY = ['premium', 'enhanced', 'natural', 'neural', 'online', 'siri'];
+const quality = v => QUALITY.some(q => String(v.name).toLowerCase().includes(q)) ? 2 : 0;
+const best = (list, tokens) => list
+  .map((v, i) => ({ v, i, score: (tokens.some(t => String(v.name).toLowerCase().includes(t)) ? 1 : 0) + quality(v) }))
+  .filter(x => x.score >= 1)
+  .sort((a, b) => b.score - a.score || a.i - b.i)[0];
+
+// Two voices, preferably one that sounds female and one male, and the best quality the device has.
+// shared is true when the device has only one voice.
 export function pickVoices(voices) {
   const en = english(voices || []);
   if (!en.length) return { a: null, b: null, shared: true };
-  const a = named(en, FEMALE) || en[0];
-  const b = named(en.filter(v => v !== a), MALE) || en.find(v => v !== a) || a;
+  const fem = best(en, FEMALE), a = fem ? fem.v : [...en].sort((x, y) => quality(y) - quality(x))[0];
+  const rest = en.filter(v => v !== a);
+  const male = best(rest, MALE);
+  const b = male ? male.v : [...rest].sort((x, y) => quality(y) - quality(x))[0] || a;
   return { a, b, shared: a === b };
 }
 
