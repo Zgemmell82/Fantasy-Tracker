@@ -644,3 +644,29 @@ button.lrow:active { background: var(--surface-3); }
 .radio-line.h1.talking .radio-av { box-shadow: 0 0 0 3px color-mix(in srgb, #8b7cff 40%, transparent); }
 .radio-wait, .radio-note { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.45; }
 .radio-foot { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--faint); }
+
+/* ── Lineup check & status flags ───────────────────────── */
+.flag { font-style: normal; font-size: 10px; font-weight: 800; letter-spacing: 0.03em; padding: 2px 5px; border-radius: 5px; color: var(--coral); background: color-mix(in srgb, var(--coral) 16%, transparent); }
+.flag.questionable { color: var(--amber); background: color-mix(in srgb, var(--amber) 18%, transparent); }
+.flag.bye { color: var(--muted); background: var(--surface-3); }
+.flag.good { color: var(--mint); background: color-mix(in srgb, var(--mint) 16%, transparent); }
+.lc { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.lc-head { display: flex; align-items: center; gap: 8px; }
+.lc-head b { font-family: var(--font-display); font-size: 17px; font-weight: 800; letter-spacing: -0.01em; }
+.lc-head svg { color: var(--muted); }
+.lc-pill { margin-left: auto; font-size: 12px; font-weight: 800; padding: 3px 10px; border-radius: 999px; }
+.lc-pill.ok { color: var(--mint); background: color-mix(in srgb, var(--mint) 14%, transparent); }
+.lc-pill.warn { color: var(--amber); background: color-mix(in srgb, var(--amber) 16%, transparent); }
+.lc-pill.bad { color: var(--coral); background: color-mix(in srgb, var(--coral) 16%, transparent); }
+.lc-sub { margin: 0; font-size: 13px; color: var(--muted); }
+.lc-head .lc-sub { margin-left: auto; }
+.lc-list { display: flex; flex-direction: column; }
+.lc-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; }
+.lc-row + .lc-row { border-top: 1px solid var(--line); }
+.lc-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.lc-name { font-size: 15px; font-weight: 700; }
+.lc-det { color: var(--muted); }
+.lc-h { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: 0.02em; margin-top: 4px; }
+.lc-h.good i { width: 8px; height: 8px; border-radius: 50%; background: var(--mint); }
+.lc-more { width: 100%; }
+.lc-chip { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--amber); }

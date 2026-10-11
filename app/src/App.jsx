@@ -5,6 +5,8 @@ import { SEASON, WEEKS, currentWeek, seedWeek } from './lib/season.js';
 import { cloudState, hydrate, legacyDb, userKey } from './lib/account.js';
 import { gameFor, gameState, leagueRemaining } from './lib/remaining.js';
 import { alignByPosition } from './lib/lineup.js';
+import { loadInjuries } from './lib/injuries.js';
+import { alertKey, alertSummary, lineupAlerts } from './lib/alerts.js';
 import { getTheme, setTheme } from './lib/theme.js';
 import { pullState, pushState, supabase } from './lib/cloud.js';
 import { AuthScreen, NewPassword, SetupNeeded, Splash, useSession } from './Auth.jsx';
@@ -150,6 +152,17 @@ function Tracker({ user, onSignOut }) {
     if (changed && ready.current) { clearTimeout(pushTimer.current); pushTimer.current = setTimeout(push, 1200); }
   }, [db, key, push]);
 
+  // Injury designations load on open and refresh every half hour while the app is in view.
+  useEffect(() => {
+    let stop = false;
+    const go = () => loadInjuries()
+      .then(lookup => { if (!stop) setInj({ lookup, error: '' }); })
+      .catch(e => { if (!stop) setInj(prev => ({ ...prev, error: e.message })); });
+    go();
+    const t = setInterval(() => { if (document.visibilityState === 'visible') go(); }, 30 * 60000);
+    return () => { stop = true; clearInterval(t); };
+  }, []);
+
   const signOut = async () => {
     if (ready.current && meta.current.dirty) await push();
     onSignOut();
@@ -167,6 +180,7 @@ function Tracker({ user, onSignOut }) {
   const [leagueFor, setLeagueFor] = useState(null);
   const [matchupFor, setMatchupFor] = useState(null);
   const [theme, setThemeState] = useState(getTheme);
+  const [inj, setInj] = useState({ lookup: null, error: '' });
   const [lgSel, setLgSel] = useState([]);       // leagues chosen in the filter; empty = all leagues
   const [syncing, setSyncing] = useState(false);
   const [toast, setToast] = useState('');
@@ -340,6 +354,9 @@ function Tracker({ user, onSignOut }) {
   const shown = sel.length ? names.filter(n => sel.includes(n)) : names;
   const colors = Object.fromEntries(db.leagues.map(l => [l.name, l.color]));
   const colorOf = name => colors[name] || LEAGUE_COLORS[0];
+  // Starters who won't play, may not play, or are on a bye, for every league (the filter narrows what's shown).
+  const alerts = inj.lookup || !db.leagues.length ? lineupAlerts(week, wk, names, inj.lookup, board) : [];
+  const alertCounts = alertSummary(alerts).byLeague;
   const now = Date.now();
   const remain = Object.fromEntries(names.map(n => [n, leagueRemaining(week, wk[n], board, now)]));
 
@@ -373,12 +390,12 @@ function Tracker({ user, onSignOut }) {
 
       <main className="body" key={screen}>
         {screen === 'games'
-          ? <Games week={week} wk={wk} names={shown} leagues={names} sel={sel} onSel={setLgSel} scored={scoredWeek} filter={filter} setFilter={setFilter} onToggle={toggleScored} board={board} helper={db.espnHelper} />
+          ? <Games week={week} wk={wk} names={shown} leagues={names} sel={sel} onSel={setLgSel} scored={scoredWeek} filter={filter} setFilter={setFilter} onToggle={toggleScored} board={board} helper={db.espnHelper} alerts={alerts.filter(a => a.leagues.some(l => shown.includes(l)))} injReady={!!inj.lookup} injError={inj.error} />
           : screen === 'hot'
           ? <HotRoute week={week} wk={wk} leagues={names} shown={shown} sel={sel} onSel={setLgSel} board={board} helper={db.espnHelper} />
           : screen === 'plays'
           ? <PlaysScreen games={groupByGame(week, wk, undefined, shown).games} board={board} boardError={boardError} helper={db.espnHelper} scored={scoredWeek} leagues={names} sel={sel} onSel={setLgSel} />
-          : <Leagues week={week} wk={wk} leagues={db.leagues} remain={remain} onMatchup={setMatchupFor} theme={theme} onTheme={t => setThemeState(setTheme(t))} conn={db.conn} account={{ email: user.email, cloud, onSignOut: signOut, canImport: !!legacy && !db.leagues.length, onImport: importLegacy, onRetry: settle }} synced={db.synced} syncing={syncing}
+          : <Leagues week={week} wk={wk} leagues={db.leagues} remain={remain} alertCounts={alertCounts} onMatchup={setMatchupFor} theme={theme} onTheme={t => setThemeState(setTheme(t))} conn={db.conn} account={{ email: user.email, cloud, onSignOut: signOut, canImport: !!legacy && !db.leagues.length, onImport: importLegacy, onRetry: settle }} synced={db.synced} syncing={syncing}
               onSync={async n => { if (await syncOne(n, week)) flash(n + ' synced'); }}
               onEdit={setEditFor} onConnect={setConnFor} onSettings={setLeagueFor} />}
       </main>
@@ -458,17 +475,57 @@ function TagList({ leagues, pts, showPts }) {
   );
 }
 
-function PlayerRow({ p, side, done, showPts, onToggle }) {
+function PlayerRow({ p, side, done, showPts, onToggle, flag }) {
   return (
     <button className={'prow' + (done ? ' done' : '')} onClick={onToggle} aria-pressed={done}>
       <Avatar p={p} side={side} />
       <span className="prow-main">
         <span className="prow-name">{p.name}</span>
-        <span className="prow-meta"><PosChip pos={p.pos} /><span>{p.team}</span></span>
+        <span className="prow-meta"><PosChip pos={p.pos} /><span>{p.team}</span>{flag && <Flag a={flag} />}</span>
       </span>
       <TagList leagues={p.leagues} pts={p.pts} showPts={showPts} />
       <span className="prow-check" aria-hidden="true">{done ? <Icon.check size={14} sw={3} /> : null}</span>
     </button>
+  );
+}
+
+// A short status tag for a starter who won't play or may not play.
+function Flag({ a }) {
+  const text = a.kind === 'bye' ? 'BYE' : a.kind === 'out' ? a.label.toUpperCase() : a.kind === 'doubtful' ? 'D' : 'Q';
+  return <em className={'flag ' + a.kind + (a.side === 'opp' ? ' good' : '')} title={a.label + (a.part ? ' (' + a.part + ')' : '')}>{text}</em>;
+}
+
+// The lineup check: your starters who are out, doubtful, questionable or on a bye, and the same on your opponents'.
+function LineupCheck({ alerts, ready, error }) {
+  const [all, setAll] = useState(false);
+  if (!ready) return error ? <div className="card lc"><div className="lc-head"><Icon.alert size={16} sw={2.5} /><b>Lineup check</b><span className="lc-sub">couldn't load injury reports</span></div></div> : null;
+  const mine = alerts.filter(a => a.side === 'mine'), theirs = alerts.filter(a => a.side === 'opp');
+  const serious = mine.some(a => a.severity >= 2);
+  const rows = (list, side) => (all ? list : list.slice(0, 4)).map(a => (
+    <div className="lc-row" key={a.key}>
+      <Avatar p={a.player} size={34} side={side} />
+      <div className="lc-main">
+        <div className="lc-name">{a.player.name}</div>
+        <div className="prow-meta"><PosChip pos={a.player.pos} /><span>{a.player.team}</span><Flag a={a} />
+          <span className="lc-det">{a.kind === 'bye' ? 'On a bye' : a.label + (a.part ? ' · ' + a.part : '')}{a.when ? ' · ' + a.when : ''}</span></div>
+      </div>
+      <TagList leagues={a.leagues} />
+    </div>
+  ));
+  const more = mine.length + theirs.length > 8 ? (all ? 'Show fewer' : 'Show all ' + (mine.length + theirs.length)) : null;
+  return (
+    <section className="card lc" aria-label="Lineup check">
+      <div className="lc-head">
+        {mine.length ? <Icon.alert size={16} sw={2.5} /> : <Icon.check size={16} sw={3} />}
+        <b>Lineup check</b>
+        <span className={'lc-pill' + (mine.length ? (serious ? ' bad' : ' warn') : ' ok')}>{mine.length ? mine.length + ' to check' : 'All clear'}</span>
+      </div>
+      {!mine.length && <p className="lc-sub">None of your starters are out, doubtful, questionable or on a bye.</p>}
+      {mine.length > 0 && <div className="lc-list">{rows(mine, 'mine')}</div>}
+      {theirs.length > 0 && <div className="lc-h good"><i />Good news: your opponents are missing</div>}
+      {theirs.length > 0 && <div className="lc-list">{rows(theirs, 'opp')}</div>}
+      {more && <button className="pill-btn lc-more" onClick={() => setAll(!all)}>{more}</button>}
+    </section>
   );
 }
 
@@ -477,7 +534,8 @@ function StatusPill({ status }) {
   return <span className={'spill' + (status === 'Final' ? ' final' : '')}>{status}</span>;
 }
 
-function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter, onToggle, board, helper }) {
+function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter, onToggle, board, helper, alerts, injReady, injError }) {
+  const flags = Object.fromEntries(alerts.map(a => [a.key, a]));
   const [pbp, setPbp] = useState(null);
   const { games, bye } = groupByGame(week, wk, undefined, names);
   // A game is over when ESPN says it's final, or, without ESPN, once its kickoff clock has run out.
@@ -510,6 +568,8 @@ function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter
         <div className="sum-foot">{done} of {all.length} checked off</div>
       </div>
 
+      <LineupCheck alerts={alerts} ready={injReady} error={injError} />
+
       <Segmented value={filter} onChange={setFilter} options={[['all', 'All games'], ['mine', 'My players']]} />
       <LeagueFilter leagues={leagues} sel={sel} onChange={onSel} />
 
@@ -533,13 +593,13 @@ function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter
             {g.mine.length > 0 && (
               <div className="side">
                 <div className="side-h mint"><i />Your players</div>
-                {g.mine.map(p => { const auto = g.status === 'Final' && !!p.pts; return <PlayerRow key={p.uid} p={p} side="mine" showPts={g.status !== 'Upcoming'} done={isDone(scored[p.uid], auto)} onToggle={() => onToggle(p.uid, auto)} />; })}
+                {g.mine.map(p => { const auto = g.status === 'Final' && !!p.pts; return <PlayerRow key={p.uid} p={p} side="mine" flag={flags[alertKey("mine", p)]} showPts={g.status !== 'Upcoming'} done={isDone(scored[p.uid], auto)} onToggle={() => onToggle(p.uid, auto)} />; })}
               </div>
             )}
             {g.theirs.length > 0 && (
               <div className="side">
                 <div className="side-h coral"><i />Against you</div>
-                {g.theirs.map(p => { const auto = g.status === 'Final' && !!p.pts; return <PlayerRow key={p.uid} p={p} side="opp" showPts={g.status !== 'Upcoming'} done={isDone(scored[p.uid], auto)} onToggle={() => onToggle(p.uid, auto)} />; })}
+                {g.theirs.map(p => { const auto = g.status === 'Final' && !!p.pts; return <PlayerRow key={p.uid} p={p} side="opp" flag={flags[alertKey("opp", p)]} showPts={g.status !== 'Upcoming'} done={isDone(scored[p.uid], auto)} onToggle={() => onToggle(p.uid, auto)} />; })}
               </div>
             )}
             {!g.bye && (
@@ -566,7 +626,7 @@ function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter
   );
 }
 
-function Leagues({ week, wk, leagues, remain, onMatchup, theme, onTheme, conn, synced, syncing, account, onSync, onEdit, onConnect, onSettings }) {
+function Leagues({ week, wk, leagues, remain, alertCounts, onMatchup, theme, onTheme, conn, synced, syncing, account, onSync, onEdit, onConnect, onSettings }) {
   return (
     <div className="stack">
       {!leagues.length && (
@@ -612,6 +672,7 @@ function Leagues({ week, wk, leagues, remain, onMatchup, theme, onTheme, conn, s
             </div>
             <div className={'league-status' + (failed ? ' err' : l.how ? ' ok' : '')}><StatusIcon size={14} sw={2.5} /><span>{status}</span></div>
             <LeftToPlay r={remain[n]} />
+            {alertCounts[n] > 0 && <div className="lc-chip"><Icon.alert size={14} sw={2.5} />{alertCounts[n]} lineup {alertCounts[n] === 1 ? 'alert' : 'alerts'}. See Games.</div>}
             <div className="league-actions">
               {linked && <button className="pill-btn primary" disabled={syncing} onClick={() => onSync(n)}><Icon.refresh size={15} sw={2.5} />Sync</button>}
               <button className={'pill-btn' + (linked ? '' : ' primary')} onClick={() => onEdit(n)}><Icon.pencil size={15} sw={2.5} />Edit</button>

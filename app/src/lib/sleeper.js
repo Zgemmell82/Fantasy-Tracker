@@ -65,14 +65,19 @@ export async function matchSleeperLeague(username, league, takenIds) {
 const isTeamDef = id => /^[A-Z]{2,3}$/.test(id);
 let allPlayers = null;
 
+// Sleeper's full player list (several MB), downloaded once per page load and shared by everything that needs it.
+export async function sleeperPlayers() {
+  return (allPlayers = allPlayers || await sj('players/nfl'));
+}
+
 // Sleeper's full player list is several MB, so only the names we have seen are cached on the device.
 async function resolvePlayers(ids) {
   const cache = load(LS_PL, {});
   const missing = ids.filter(id => !cache[id] && !isTeamDef(id));
   if (missing.length) {
-    allPlayers = allPlayers || await sj('players/nfl');
+    const all = await sleeperPlayers();
     missing.forEach(id => {
-      const p = allPlayers[id];
+      const p = all[id];
       if (p) cache[id] = { n: ((p.first_name || '') + ' ' + (p.last_name || '')).trim(), p: p.position, t: p.team };
     });
     save(LS_PL, cache);

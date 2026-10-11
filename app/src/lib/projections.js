@@ -5,6 +5,7 @@
 import { SEASON } from './season.js';
 import { LS_PL, load, save } from './store.js';
 import { normTeam } from './teams.js';
+import { sleeperPlayers } from './sleeper.js';
 
 const URL_BASE = 'https://api.sleeper.com/projections/nfl/' + SEASON + '/';
 const POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
@@ -66,9 +67,7 @@ export function projectionFor(lookup, p, scoring = 'half') {
 async function nameIndex() {
   const cached = load(LS_INDEX, null);
   if (cached && Date.now() - cached.at < 7 * 86400000) return cached.map;
-  const r = await fetch('https://api.sleeper.app/v1/players/nfl');
-  if (!r.ok) throw new Error('Sleeper ' + r.status);
-  const all = await r.json();
+  const all = await sleeperPlayers();
   const map = {};
   Object.entries(all).forEach(([id, p]) => {
     if (p && p.active !== false && p.team && ['QB', 'RB', 'WR', 'TE', 'K'].includes(p.position)) map[id] = { n: ((p.first_name || '') + ' ' + (p.last_name || '')).trim(), t: p.team };
