@@ -4,6 +4,7 @@ import { loadProjections } from './lib/projections.js';
 import { gameState } from './lib/remaining.js';
 import { Avatar, Icon, LeagueFilter, PosChip, Sheet, useLeagueColor } from './ui.jsx';
 import Radio from './Radio.jsx';
+import { RADIO_ENABLED } from './lib/features.js';
 import { fmtPts } from './lib/games.js';
 
 const pct = n => Math.round(n * 100);
@@ -122,7 +123,7 @@ export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, 
     <div className="stack">
       <LeagueFilter leagues={leagues} sel={sel} onChange={onSel} />
 
-      {leagues.length > 0 && <Radio week={week} wk={wk} shown={shown} board={board} helper={helper} hr={hr} />}
+      {RADIO_ENABLED && leagues.length > 0 && <Radio week={week} wk={wk} shown={shown} board={board} helper={helper} hr={hr} />}
 
       {!leagues.length && (
         <div className="card empty">
