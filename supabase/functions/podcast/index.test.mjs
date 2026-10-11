@@ -23,26 +23,28 @@ test('returns the lines Claude wrote', async () => {
   assert.match(r.lines[1].text, /helps you/);
 });
 
-test('builds the prompt itself from the facts: the default model, low effort and the fallback opt-in', async () => {
+test('builds the prompt itself from the facts: Haiku by default, low effort, no sampling settings', async () => {
   const c = fake(good);
   await call(base, { client: c });
+  const { kind, p } = c.seen[0];
+  assert.equal(kind, 'plain');
+  assert.equal(p.model, 'claude-haiku-5-5');
+  assert.deepEqual(p.output_config, { effort: 'low' });
+  assert.equal(p.fallbacks, undefined);                            // Haiku has no server-side fallback
+  assert.equal(p.temperature, undefined);                          // sampling settings are not allowed on these models
+  assert.match(p.messages[0].content, /"name":"Star"/);
+  assert.match(p.system, /A is Alex, B is Jordan/);
+});
+
+test('a stronger model can be chosen with a secret, and then the fallback opt-in is sent', async () => {
+  const c = fake(good);
+  await call(base, { client: c, env: { ANTHROPIC_API_KEY: 'k', PODCAST_MODEL: 'claude-opus-5-5' } });
   const { kind, p } = c.seen[0];
   assert.equal(kind, 'beta');
   assert.equal(p.model, 'claude-opus-5-5');
   assert.deepEqual(p.output_config, { effort: 'low' });
   assert.equal(p.fallbacks, 'default');
   assert.deepEqual(p.betas, ['server-side-fallback-2026-07-01']);
-  assert.equal(p.temperature, undefined);                          // sampling settings are not allowed on this model
-  assert.match(p.messages[0].content, /"name":"Star"/);
-  assert.match(p.system, /A is Alex, B is Jordan/);
-});
-
-test('a cheaper model can be chosen with a secret, and then no fallback is sent', async () => {
-  const c = fake(good);
-  await call(base, { client: c, env: { ANTHROPIC_API_KEY: 'k', PODCAST_MODEL: 'claude-haiku-5-5' } });
-  assert.equal(c.seen[0].kind, 'plain');
-  assert.equal(c.seen[0].p.model, 'claude-haiku-5-5');
-  assert.equal(c.seen[0].p.fallbacks, undefined);
 });
 
 test('keeps the roast mild unless asked, and strong language is never allowed', async () => {

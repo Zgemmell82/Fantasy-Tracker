@@ -33,7 +33,9 @@ With the Supabase CLI instead: `supabase functions deploy mfl --project-ref <you
 
 1. In Supabase, open **Edge Functions → Deploy a new function → Via Editor**, name it exactly `podcast`, paste the contents of `supabase/functions/podcast/index.ts`, and **Deploy** (leave **Verify JWT** on).
 2. Under **Project Settings → Edge Functions → Secrets**, add `ANTHROPIC_API_KEY` (an API key from console.anthropic.com).
-3. Optional secret `PODCAST_MODEL` picks the model. The default is `claude-opus-5-5`; `claude-haiku-5-5` is much cheaper (rough estimates for a live game: a few tenths of a dollar an hour on the default, about a cent an hour on Haiku 5.5).
+3. The default model is `claude-haiku-5-5`: quick and very cheap (a rough estimate is about a cent an hour of live listening per person). The optional secret `PODCAST_MODEL` can pick a stronger one, e.g. `claude-opus-5-5`, for better writing at roughly 40 times the cost.
+
+This uses the Claude **API**, which is billed separately from a claude.ai Pro or Max subscription: it's pay-as-you-go on the Anthropic Console, so set a monthly spend limit there.
 
 The function only accepts structured facts from the app and builds the prompt itself, so it can't be used as a general AI endpoint. Until it's set up, the app says so under the player and keeps going with built-in lines.
 

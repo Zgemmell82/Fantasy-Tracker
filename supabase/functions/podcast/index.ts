@@ -6,9 +6,10 @@
 // Only signed-in users can call it (Supabase checks the sign-in token before this code runs).
 //
 // Setup: add a secret named ANTHROPIC_API_KEY (Project Settings -> Edge Functions -> Secrets).
-// Optional secret PODCAST_MODEL picks the model (default claude-opus-5-5; claude-haiku-5-5 is far cheaper).
+// Optional secret PODCAST_MODEL picks the model (default claude-haiku-5-5, which is cheap and quick enough for live
+// banter; set it to claude-opus-5-5 for stronger writing at roughly 40 times the cost).
 
-const DEFAULT_MODEL = 'claude-opus-5-5';
+const DEFAULT_MODEL = 'claude-haiku-5-5';
 
 const STYLES: Record<string, string> = {
   optimistic: 'Optimistic: relentlessly upbeat, finds the silver lining, believes every comeback is possible.',
