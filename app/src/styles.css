@@ -585,16 +585,35 @@ button.lrow:active { background: var(--surface-3); }
 .hr-meta em { font-style: normal; color: var(--faint); }
 .hr-meta em.live { color: var(--live); font-weight: 700; display: inline-flex; align-items: center; gap: 4px; }
 .hr-meta em.live i { width: 6px; height: 6px; border-radius: 50%; background: var(--live); animation: pulse 1.4s ease-in-out infinite; }
-.hr-lines { display: flex; flex-wrap: wrap; gap: 5px; }
-.hr-lines .lg-chip { font-size: 11px; }
-.hr-sit { font-weight: 600; color: var(--muted); }
-.hr-lines .lg-chip b { font-weight: 800; font-variant-numeric: tabular-nums; }
-.hr-lines .lg-chip.mine b { color: var(--mint); }
-.hr-lines .lg-chip.opp b { color: var(--coral); }
+.hr-lines { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
+.hr-line { display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "name role val" "sit sit sit"; align-items: baseline; column-gap: 8px; font-size: 12.5px; padding: 3px 0; }
+.hr-line + .hr-line { border-top: 1px dashed var(--line); }
+.hr-lname { grid-area: name; } .hr-role { grid-area: role; } .hr-val { grid-area: val; } .hr-sit { grid-area: sit; font-size: 12px; }
+.hr-lname { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; color: var(--lct, var(--lc)); white-space: nowrap; }
+.hr-lname i { width: 7px; height: 7px; border-radius: 50%; background: var(--lc); align-self: center; }
+.hr-role { font-size: 11px; font-weight: 800; letter-spacing: 0.03em; text-transform: uppercase; }
+.hr-role.mine { color: var(--mint); }
+.hr-role.opp { color: var(--coral); }
+.hr-sit { color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hr-val { font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.hr-val.up { color: var(--mint); }
+.hr-val.down { color: var(--coral); }
+.hr-val.none { color: var(--faint); font-weight: 600; }
 .hr-net { flex: none; display: flex; flex-direction: column; align-items: flex-end; font-variant-numeric: tabular-nums; }
 .hr-net b { font-family: var(--font-display); font-size: 26px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
-.hr-net span { font-size: 11px; font-weight: 600; color: var(--muted); }
+.hr-net span { font-size: 10.5px; font-weight: 600; color: var(--muted); text-align: right; line-height: 1.25; margin-top: 3px; }
 .hr-row.for .hr-net b { color: var(--mint); }
 .hr-row.against .hr-net b { color: var(--coral); }
 .hr-note { text-align: left; line-height: 1.45; }
 .hr-more { width: 100%; }
+
+.hr-help { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; color: var(--muted); background: var(--surface); }
+.hr-help:active { background: var(--surface-2); }
+.howto { display: flex; flex-direction: column; gap: 16px; }
+.ht-block { display: flex; flex-direction: column; gap: 8px; }
+.ht-block > b { font-family: var(--font-display); font-size: 16px; font-weight: 800; }
+.ht-block p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--muted); }
+.ht-block p i { font-style: normal; font-weight: 700; color: var(--text); }
+.ht-block .mint { color: var(--mint); } .ht-block .coral { color: var(--coral); } .ht-block .muted { color: var(--faint); font-weight: 600; }
+.ht-ex { display: grid; grid-template-columns: 78px 1fr; align-items: baseline; gap: 10px; padding: 9px 12px; border-radius: 12px; background: var(--surface-2); font-size: 13.5px; line-height: 1.4; }
+.ht-ex .hr-val { font-size: 15px; text-align: left; }
