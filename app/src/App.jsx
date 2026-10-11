@@ -16,6 +16,8 @@ import { fmtPts, groupByGame, liveNow, weekStarted } from './lib/games.js';
 import { matchSleeperLeague, sleeperLeagues, syncSleeper } from './lib/sleeper.js';
 import { syncEspn } from './lib/espn.js';
 import { syncMfl } from './lib/mfl.js';
+import { syncYahoo, yahooLeagues, startYahooSignIn, yahooStatus, yahooDisconnect, yahooFinish } from './lib/yahoo.js';
+import { takeYahooCode } from './lib/yahoo-return.js';
 import { Feed, GameStatus, PlaysScreen, useScoreboard } from './Plays.jsx';
 import { boardFor } from './lib/pbp.js';
 import HotRoute from './HotRoute.jsx';
@@ -25,7 +27,7 @@ function syncEspnFor(c, week, helper) {
   return syncEspn(c.leagueId, c.teamId, week, c.private ? helper : '');
 }
 
-const SRC_NAME = { sleeper: 'Sleeper', espn: 'ESPN', mfl: 'MFL', ffpc: 'FFPC', manual: 'By hand' };
+const SRC_NAME = { sleeper: 'Sleeper', espn: 'ESPN', mfl: 'MFL', yahoo: 'Yahoo', ffpc: 'FFPC', manual: 'By hand' };
 const RESYNC_MS = 15 * 60000;
 const LIVE_RESYNC_MS = 2 * 60000;
 
@@ -177,7 +179,15 @@ function Tracker({ user, onSignOut }) {
   const [filter, setFilter] = useState('all');
   const [editFor, setEditFor] = useState(null);
   const [connFor, setConnFor] = useState(null);
+  const [yahooNote, setYahooNote] = useState('');   // result of coming back from Yahoo's sign-in
   const [leagueFor, setLeagueFor] = useState(null);
+  useEffect(() => {
+    const back = takeYahooCode();
+    if (!back) return;
+    setConnFor(back.league || null);
+    if (!back.code) { setYahooNote(back.error); return; }
+    yahooFinish(back.code).then(() => setYahooNote('Connected to Yahoo. Pick your team below.'), e => setYahooNote(e.message));
+  }, []);
   const [matchupFor, setMatchupFor] = useState(null);
   const [theme, setThemeState] = useState(getTheme);
   const [inj, setInj] = useState({ lookup: null, error: '' });
@@ -276,6 +286,10 @@ function Tracker({ user, onSignOut }) {
     if (c.source === 'mfl') {
       if (!c.leagueId || !c.teamId) return Promise.reject(new Error('Add the league ID and franchise ID under Source.'));
       return syncMfl(c.leagueId, c.teamId, week, c.apiKey);
+    }
+    if (c.source === 'yahoo') {
+      if (!c.leagueId || !c.teamId) return Promise.reject(new Error('Pick your Yahoo team under Source.'));
+      return syncYahoo(c.leagueId, c.teamId, week);
     }
     return syncEspnFor(c, week, dbRef.current.espnHelper);
   }, [setConn]);
@@ -416,6 +430,7 @@ function Tracker({ user, onSignOut }) {
         syncErr={(db.synced[connFor + ':' + week] || {}).err}
         takenIds={names.filter(n => n !== connFor && db.conn[n] && db.conn[n].source === 'sleeper').map(n => db.conn[n].leagueId).filter(Boolean)}
         espnHelper={db.espnHelper} setEspnHelper={u => setDb(prev => ({ ...prev, espnHelper: u.trim() }))}
+        yahooNote={yahooNote}
         testMfl={async c => { const res = await syncMfl(c.leagueId, c.teamId, week, c.apiKey); setLeague(week, connFor, res, 'mfl'); markSynced(connFor + ':' + week, { ok: true }); return res; }}
         testEspn={async c => { const res = await syncEspnFor(c, week, db.espnHelper); setLeague(week, connFor, res, 'espn'); markSynced(connFor + ':' + week, { ok: true }); return res; }}
         onClose={closeConn} />}
@@ -762,7 +777,7 @@ function EditSheet({ league, week, lineup, onEdit, onClose }) {
   );
 }
 
-function ConnectSheet({ league, week, conn, sleeperUser, setSleeperUser, setConn, syncErr, takenIds, espnHelper, setEspnHelper, testEspn, testMfl, onClose }) {
+function ConnectSheet({ league, week, conn, sleeperUser, setSleeperUser, setConn, syncErr, takenIds, espnHelper, setEspnHelper, testEspn, testMfl, yahooNote, onClose }) {
   const [sleeperList, setSleeperList] = useState(null);
   const [sleeperMsg, setSleeperMsg] = useState('');
   const [espnMsg, setEspnMsg] = useState('');
@@ -804,12 +819,26 @@ function ConnectSheet({ league, week, conn, sleeperUser, setSleeperUser, setConn
     setBusy(false);
   };
 
+  const [yh, setYh] = useState({ state: 'idle', teams: [], msg: '' });
+  const yahooLoad = async () => {
+    setYh({ state: 'busy', teams: [], msg: '' });
+    try {
+      const st = await yahooStatus();
+      if (!st.connected) { setYh({ state: 'out', teams: [], msg: st.configured ? '' : 'Yahoo isn\'t set up on your Supabase project yet (see app/README.md).' }); return; }
+      const teams = await yahooLeagues();
+      setYh({ state: 'in', teams, msg: teams.length ? '' : 'No Yahoo fantasy football teams found for this season.' });
+    } catch (e) { setYh({ state: e.message === 'not_connected' ? 'out' : 'err', teams: [], msg: e.message === 'not_connected' ? '' : e.message }); }
+  };
+  useEffect(() => { if (c.source === 'yahoo') yahooLoad(); }, [c.source, yahooNote]); // eslint-disable-line react-hooks/exhaustive-deps
+  const yahooGo = async () => { setBusy(true); try { await startYahooSignIn(league); } catch (e) { setYh(y => ({ ...y, msg: e.message })); setBusy(false); } };
+  const yahooOff = async () => { setBusy(true); try { await yahooDisconnect(); } catch (e) { /* ignore */ } setBusy(false); setConn({ leagueId: '', teamId: '' }); setYh({ state: 'out', teams: [], msg: '' }); };
+
   const pickSource = s => setConn({ source: s, leagueId: s === c.source ? c.leagueId : '', teamId: s === c.source ? c.teamId : '', apiKey: s === c.source ? c.apiKey : '' });
   const ok = /^Connected/.test(espnMsg);
 
   return (
     <Sheet title={league} subtitle="Where this league's lineups come from" onClose={onClose} label={'Connect ' + league}>
-      <Segmented value={c.source} onChange={pickSource} options={[['sleeper', 'Sleeper'], ['espn', 'ESPN'], ['mfl', 'MFL'], ['ffpc', 'FFPC'], ['manual', 'By hand']]} />
+      <Segmented value={c.source} onChange={pickSource} options={[['sleeper', 'Sleeper'], ['espn', 'ESPN'], ['mfl', 'MFL'], ['yahoo', 'Yahoo'], ['ffpc', 'FFPC'], ['manual', 'By hand']]} />
 
       {c.source === 'manual' && (
         <p className="sheet-note">You'll update this league each week by editing its players. Nothing is fetched automatically.</p>
@@ -822,6 +851,36 @@ function ConnectSheet({ league, week, conn, sleeperUser, setSleeperUser, setConn
             <label htmlFor="ffpc-id">FFPC league number (optional)</label>
             <input id="ffpc-id" className="input" value={c.leagueId || ''} onChange={e => setConn({ leagueId: e.target.value.replace(/\D/g, '') })} inputMode="numeric" placeholder="For your own reference" />
           </div>
+        </>
+      )}
+
+      {c.source === 'yahoo' && (
+        <>
+          {yahooNote && <div className={'banner' + (/^Connected/.test(yahooNote) ? '' : ' err')}><span>{yahooNote}</span></div>}
+          {yh.state === 'busy' && <div className="sheet-note">Checking Yahoo…</div>}
+          {yh.state === 'out' && (
+            <button className="pill-btn" onClick={yahooGo} disabled={busy}><Icon.link size={15} sw={2.5} />{busy ? 'Opening Yahoo…' : 'Connect Yahoo'}</button>
+          )}
+          {yh.msg && <div className="sheet-note">{yh.msg}</div>}
+          {yh.state === 'in' && yh.teams.length > 0 && (
+            <div className="list">
+              <div className="list-h">Pick your {league} team</div>
+              {yh.teams.map(t => {
+                const on = c.teamId === t.teamKey;
+                return (
+                  <button key={t.teamKey} className={'lrow pick' + (on ? ' on' : '')}
+                    onClick={() => { setConn({ leagueId: t.leagueKey, teamId: t.teamKey, name: t.teamName }); setEspnMsg('Saved. Tap Done to pull this week\'s lineups.'); }}>
+                    <span className="lrow-main"><span className="lrow-name">{t.teamName}</span><span className="lrow-sub">League {t.leagueKey}</span></span>
+                    <span className={'radio' + (on ? ' on' : '')}>{on && <Icon.check size={13} sw={3.5} />}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {espnMsg && <div className="sheet-note">{espnMsg}</div>}
+          {yh.state === 'in' && <button className="pill-btn" onClick={yahooOff} disabled={busy}>Disconnect Yahoo</button>}
+          {!c.teamId && syncErr && <div className="banner err"><Icon.alert size={16} sw={2.5} /><span>{syncErr}</span></div>}
+          <p className="sheet-note">Yahoo asks you to sign in on yahoo.com and gives this app read-only access to your fantasy lineups; your Yahoo password never reaches the app. Set up once (see app/README.md).</p>
         </>
       )}
 
@@ -920,7 +979,7 @@ function MatchupSheet({ league, week, lineup, board, onClose }) {
   const mine = l.score && l.score.mine != null ? l.score.mine : pts(l.mine);
   const opp = l.score && l.score.opp != null ? l.score.opp : pts(l.opp);
   // ESPN and MyFantasyLeague lineups are shown QB, RB, WR, TE, K, DEF, then IDP; other sources keep their own slot order.
-  const byPosition = l.how === 'espn' || l.how === 'mfl';
+  const byPosition = l.how === 'espn' || l.how === 'mfl' || l.how === 'yahoo';
   const rows = byPosition ? alignByPosition(l.mine, l.opp)
     : Array.from({ length: Math.max(l.mine.length, l.opp.length) }, (_, i) => [l.mine[i], l.opp[i]]);
   const hasPts = [...l.mine, ...l.opp].some(p => typeof p.pts === 'number');

@@ -16,6 +16,16 @@ Accounts use [Supabase](https://supabase.com) (free tier). One-time setup:
 4. **Project Settings → API**: copy the **Project URL** and the **anon public** key. (The anon key is meant to be public; the table's row-level security is what protects each account's data. Never use the `service_role` key here.)
 5. In the GitHub repository: **Settings → Secrets and variables → Actions → Variables → New repository variable**, add `SUPABASE_URL` and `SUPABASE_ANON_KEY`, then run the **Deploy app to GitHub Pages** workflow again.
 
+### Yahoo Fantasy helper (needed for Yahoo leagues)
+
+Yahoo requires a sign-in ("OAuth") and keeps a secret key, so Yahoo leagues go through a Supabase Edge Function, `yahoo`. It is read-only, only for signed-in users, only talks to Yahoo's fantasy API, and keeps each user's Yahoo tokens in a table only the function can read. Set it up once:
+
+1. Go to https://developer.yahoo.com/apps/create/ and create an app: *Web Application*, permission **Fantasy Sports – Read**. For **Redirect URI** use the exact address of your app (for example `https://zgemmell82.github.io/Fantasy-Tracker/`). Copy the **Client ID** and **Client Secret**.
+2. In Supabase run the `yahoo_tokens` part of `supabase/schema.sql` (SQL Editor).
+3. Supabase → **Edge Functions → Deploy a new function**, name it exactly `yahoo`, paste `supabase/functions/yahoo/index.ts`, and deploy (leave **Verify JWT** on).
+4. Edge Functions → **Secrets**: add `YAHOO_CLIENT_ID` and `YAHOO_CLIENT_SECRET`. Optional: `YAHOO_REDIRECT_URIS` (comma-separated pages Yahoo may send people back to).
+5. In the app: **Leagues → Source → Yahoo → Connect Yahoo**, sign in at Yahoo, then pick your team.
+
 ### MyFantasyLeague helper (needed for MFL leagues)
 
 MyFantasyLeague doesn't let other websites read its data from the browser, so MFL leagues are fetched through a small Supabase Edge Function, `mfl`. It only works for signed-in users, only talks to `api.myfantasyleague.com`, and only fetches the few kinds of data the app needs. Install it once:
@@ -71,6 +81,7 @@ npm run build    # production build in dist/
   - **Sleeper**: enter your username and pick the league.
   - **ESPN**: league ID and team ID. Private leagues go through the ESPN helper (see `../espn-helper/README.md`).
   - **MFL** (MyFantasyLeague): league ID, franchise ID and, for private leagues, an API key.
+  - **Yahoo**: sign in with Yahoo once (see the Yahoo helper above), then pick your team from the list.
   - **FFPC**: no feed this app can read, so FFPC leagues are labelled and filled in by hand with **Edit**.
   - **By hand**: edit starters yourself.
 - Connected leagues sync when the app opens, when you switch weeks and when it returns to the foreground, at most once every 15 minutes. **Sync** in the header forces a refresh.

@@ -78,3 +78,16 @@ export async function radioAI(payload) {
   if (!data || !data.ok) throw new Error((data && data.error) || 'bad_output');
   return data.lines;
 }
+
+// Talks to the account's "yahoo" function: Yahoo sign-in, status, and read-only Yahoo Fantasy lookups.
+export async function yahooCall(body) {
+  const { data, error } = await supabase.functions.invoke('yahoo', { body });
+  if (error) {
+    const status = error.context && error.context.status;
+    if (status === 404) throw new Error('The Yahoo helper isn\'t installed on your Supabase project yet. Add the "yahoo" function from supabase/functions/yahoo (steps are in app/README.md).');
+    if (status === 401) throw new Error('Your sign-in has expired. Sign out and back in, then try again.');
+    throw new Error('Couldn\'t reach the Yahoo helper. Check your connection and try again.');
+  }
+  if (!data || !data.ok) throw new Error(!data ? 'The Yahoo helper returned something unexpected.' : data.error === 'not_connected' ? 'not_connected' : data.error === 'not_configured' ? 'Yahoo isn\'t set up on your Supabase project yet (add the YAHOO_CLIENT_ID and YAHOO_CLIENT_SECRET secrets; see app/README.md).' : (data.error || 'The Yahoo helper returned something unexpected.'));
+  return data;
+}

@@ -18,3 +18,14 @@ create policy "read own state" on public.tracker_state for select to authenticat
 create policy "insert own state" on public.tracker_state for insert to authenticated with check (auth.uid() = user_id);
 create policy "update own state" on public.tracker_state for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "delete own state" on public.tracker_state for delete to authenticated using (auth.uid() = user_id);
+
+-- Yahoo Fantasy connections (used by the "yahoo" Edge Function).
+-- Row-level security is on with no policies, so only the service role (the function) can read or write it.
+create table if not exists public.yahoo_tokens (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  access_token text not null,
+  refresh_token text not null,
+  expires_at bigint not null default 0,
+  updated_at timestamptz not null default now()
+);
+alter table public.yahoo_tokens enable row level security;
