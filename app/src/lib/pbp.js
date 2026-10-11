@@ -37,6 +37,8 @@ export function parseScoreboard(j) {
       id: ev.id,
       state: type.state || 'pre',                // pre | in | post
       detail: type.shortDetail || type.detail || '',
+      period: Number(st.period) || 0,                 // 1-4, 5 = overtime
+      clock: typeof st.clock === 'number' ? st.clock : null,   // seconds left in the period
       away: abbr(away), home: abbr(home),
       awayScore: away.score != null ? Number(away.score) : null,
       homeScore: home.score != null ? Number(home.score) : null,

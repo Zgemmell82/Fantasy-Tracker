@@ -15,6 +15,7 @@ import { matchSleeperLeague, sleeperLeagues, syncSleeper } from './lib/sleeper.j
 import { syncEspn } from './lib/espn.js';
 import { syncMfl } from './lib/mfl.js';
 import { Feed, GameStatus, PlaysScreen, useScoreboard } from './Plays.jsx';
+import HotRoute from './HotRoute.jsx';
 
 function syncEspnFor(c, week, helper) {
   if (c.private && !helper) return Promise.reject(new Error('Private league: add your ESPN helper link under Connect.'));
@@ -360,7 +361,7 @@ function Tracker({ user, onSignOut }) {
         <div className="head-row">
           <div>
             <div className="eyebrow">{SEASON} season</div>
-            <h1 className="title">{screen === 'games' ? 'Week ' + week : screen === 'plays' ? 'Plays' : 'Leagues'}</h1>
+            <h1 className="title">{screen === 'games' ? 'Week ' + week : screen === 'plays' ? 'Plays' : screen === 'hot' ? 'Hot Route' : 'Leagues'}</h1>
           </div>
           <button className={'icon-btn' + (syncing ? ' spinning' : '')} disabled={syncing} onClick={() => syncAll(false)} aria-label="Sync connected leagues">
             <Icon.refresh size={19} />
@@ -372,6 +373,8 @@ function Tracker({ user, onSignOut }) {
       <main className="body" key={screen}>
         {screen === 'games'
           ? <Games week={week} wk={wk} names={shown} leagues={names} sel={sel} onSel={setLgSel} scored={scoredWeek} filter={filter} setFilter={setFilter} onToggle={toggleScored} board={board} helper={db.espnHelper} />
+          : screen === 'hot'
+          ? <HotRoute week={week} wk={wk} leagues={names} shown={shown} sel={sel} onSel={setLgSel} board={board} />
           : screen === 'plays'
           ? <PlaysScreen games={groupByGame(week, wk, undefined, shown).games} board={board} boardError={boardError} helper={db.espnHelper} scored={scoredWeek} leagues={names} sel={sel} onSel={setLgSel} />
           : <Leagues week={week} wk={wk} leagues={db.leagues} remain={remain} onMatchup={setMatchupFor} theme={theme} onTheme={t => setThemeState(setTheme(t))} conn={db.conn} account={{ email: user.email, cloud, onSignOut: signOut, canImport: !!legacy && !db.leagues.length, onImport: importLegacy, onRetry: settle }} synced={db.synced} syncing={syncing}
@@ -382,6 +385,7 @@ function Tracker({ user, onSignOut }) {
       <nav className="tabbar">
         <button className={screen === 'games' ? 'on' : ''} onClick={() => setScreen('games')}><Icon.football size={23} /><span>Games</span></button>
         <button className={screen === 'plays' ? 'on' : ''} onClick={() => setScreen('plays')}><Icon.activity size={23} /><span>Plays</span></button>
+        <button className={screen === 'hot' ? 'on' : ''} onClick={() => setScreen('hot')}><Icon.route size={23} /><span>Hot Route</span></button>
         <button className={screen === 'leagues' ? 'on' : ''} onClick={() => setScreen('leagues')}><Icon.trophy size={23} /><span>Leagues</span></button>
       </nav>
 
