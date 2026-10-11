@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseScoreboard, parsePlays, matchPlays, nameRe, roleOf } from './pbp.js';
+import { parseScoreboard, parsePlays, matchPlays, nameRe, roleOf, boardFor, nextPollMs, mergeBoards } from './pbp.js';
 
 const team = (id, abbreviation, homeAway, score) => ({ homeAway, score, team: { id, abbreviation } });
 let n = 0;
@@ -65,4 +65,37 @@ test('scoreboard gives live score, clock and game id keyed like the schedule', (
   assert.equal(sb['WAS@BUF'].homeScore, 21);
   assert.equal(sb['WAS@BUF'].possession, 'WAS');
   assert.equal(sb['WAS@BUF'].state, 'in');
+});
+
+test('a game listed home/away the other way round is still found, with its teams and score turned around', () => {
+  const board = { 'JAX@PHI': { id: '9', state: 'in', away: 'JAX', home: 'PHI', awayScore: 3, homeScore: 7 } };
+  assert.equal(boardFor(board, 'JAX@PHI').id, '9');
+  const swapped = boardFor(board, 'PHI@JAX');                       // the schedule says PHI at JAX
+  assert.deepEqual([swapped.away, swapped.home, swapped.awayScore, swapped.homeScore], ['PHI', 'JAX', 7, 3]);
+  assert.equal(boardFor(board, 'DAL@NYG'), undefined);
+});
+
+test('keeps polling the scoreboard before kickoff so a game that starts later is noticed', () => {
+  const KICK = Date.parse('2026-10-11T13:30:00Z');                  // week 5, PHI at JAX
+  const pre = { 'PHI@JAX': { state: 'pre' } };
+  assert.equal(nextPollMs(pre, 5, KICK - 10 * 60000), 30000);       // about to start
+  assert.equal(nextPollMs(pre, 5, KICK + 5 * 60000), 30000);        // started, scoreboard still says pre
+  assert.equal(nextPollMs({ 'PHI@JAX': { state: 'in' } }, 5, KICK + 60000), 30000);
+  assert.equal(nextPollMs(pre, 5, Date.parse('2026-10-09T12:00:00Z')), 300000);   // two days out
+  assert.equal(nextPollMs({}, 5, Date.parse('2026-10-14T12:00:00Z')), null);      // week is over
+});
+
+test('merges in games a second scoreboard knows about, without duplicating swapped ones', () => {
+  const out = mergeBoards({ 'A@B': { id: '1' } }, { 'B@A': { id: '2' }, 'C@D': { id: '3' } });
+  assert.deepEqual(Object.keys(out).sort(), ['A@B', 'C@D']);
+});
+
+test('reads plays from a flat plays list when a live summary has no drives', () => {
+  const r = parsePlays({
+    header: { competitions: [{ competitors: [{ homeAway: 'home', team: { id: '30', abbreviation: 'JAX' } }, { homeAway: 'away', team: { id: '21', abbreviation: 'PHI' } }] }] },
+    plays: [{ id: '1', sequenceNumber: '1', period: { number: 1 }, clock: { displayValue: '15:00' }, text: 'J.Hurts pass short left to D.Smith for 8 yards', team: { id: '21' } }]
+  });
+  assert.equal(r.plays.length, 1);
+  assert.equal(r.plays[0].offense, 'PHI');
+  assert.equal(r.home, 'JAX');
 });

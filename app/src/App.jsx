@@ -15,6 +15,7 @@ import { matchSleeperLeague, sleeperLeagues, syncSleeper } from './lib/sleeper.j
 import { syncEspn } from './lib/espn.js';
 import { syncMfl } from './lib/mfl.js';
 import { Feed, GameStatus, PlaysScreen, useScoreboard } from './Plays.jsx';
+import { boardFor } from './lib/pbp.js';
 import HotRoute from './HotRoute.jsx';
 
 function syncEspnFor(c, week, helper) {
@@ -480,7 +481,7 @@ function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter
   const [pbp, setPbp] = useState(null);
   const { games, bye } = groupByGame(week, wk, undefined, names);
   // A game is over when ESPN says it's final, or, without ESPN, once its kickoff clock has run out.
-  const isOver = g => board[g.key] ? board[g.key].state === 'post' : g.status === 'Final';
+  const isOver = g => boardFor(board, g.key) ? boardFor(board, g.key).state === 'post' : g.status === 'Final';
   const picked = games.filter(g => filter === 'all' || g.mine.length);
   // Games still to play or in progress come first; finished games, with every player done, sink to the bottom.
   const shown = [...picked.filter(g => !isOver(g)), ...picked.filter(isOver)];
@@ -526,7 +527,7 @@ function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter
                     <span className="at">@</span>
                     <TeamLogo team={home} size={30} /><span className="abbr">{home}</span>
                   </div>}
-              {g.bye ? <StatusPill status={g.status} /> : board[g.key] ? <GameStatus game={g} info={board[g.key]} /> : <StatusPill status={g.status} />}
+              {g.bye ? <StatusPill status={g.status} /> : boardFor(board, g.key) ? <GameStatus game={g} info={boardFor(board, g.key)} /> : <StatusPill status={g.status} />}
             </div>
             <div className="game-time">{g.time}</div>
             {g.mine.length > 0 && (
@@ -546,7 +547,7 @@ function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter
                 <button className={'pbp-toggle' + (pbp === g.key ? ' open' : '')} onClick={() => setPbp(pbp === g.key ? null : g.key)} aria-expanded={pbp === g.key}>
                   <Icon.activity size={15} sw={2.5} />Play-by-play<span className="chev"><Icon.chevron size={16} sw={2.5} /></span>
                 </button>
-                {pbp === g.key && <Feed game={g} info={board[g.key]} helper={helper} scored={scored} leagues={leagues} />}
+                {pbp === g.key && <Feed game={g} info={boardFor(board, g.key)} helper={helper} scored={scored} leagues={leagues} />}
               </>
             )}
           </section>

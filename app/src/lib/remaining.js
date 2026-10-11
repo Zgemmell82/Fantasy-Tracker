@@ -1,6 +1,7 @@
 // Who still has a game to play, per league, and who is left in the Monday night game.
 import { SCHEDULE_ALL } from '../data.js';
 import { normTeam } from './teams.js';
+import { boardFor } from './pbp.js';
 
 const dayET = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' });
 
@@ -9,7 +10,7 @@ export const mondayGames = week => SCHEDULE_ALL.filter(g => g.w === week && dayE
 
 // pre | in | post for one scheduled game: ESPN's word when we have it, else the kickoff clock.
 export function gameState(g, board, now = Date.now()) {
-  const info = board && board[g.a + '@' + g.h];
+  const info = boardFor(board, g.a + '@' + g.h);
   if (info && info.state) return info.state;
   const t = new Date(g.t).getTime();
   return now < t ? 'pre' : now < t + 3.5 * 3600000 ? 'in' : 'post';

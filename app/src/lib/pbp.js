@@ -1,5 +1,6 @@
 // Play-by-play from ESPN's public NFL game data, matched to the starters tracked in the app.
 import { SEASON } from './season.js';
+import { SCHEDULE_ALL } from '../data.js';
 import { normTeam } from './teams.js';
 
 const SITE = 'https://site.api.espn.com';
@@ -51,8 +52,55 @@ export function parseScoreboard(j) {
   return out;
 }
 
-export async function fetchScoreboard(week, helper) {
-  return parseScoreboard(await siteJson(NFL + 'scoreboard?seasontype=2&week=' + week + '&dates=' + SEASON, helper));
+// Finds a game on the scoreboard by the schedule's "away@home" key. International and neutral-site games can list
+// home and away the other way round, so a swapped match counts too (with its teams and scores turned around).
+export function boardFor(board, key) {
+  if (!board) return undefined;
+  if (board[key]) return board[key];
+  const [a, h] = String(key).split('@');
+  const r = board[h + '@' + a];
+  return r ? { ...r, away: r.home, home: r.away, awayScore: r.homeScore, homeScore: r.awayScore, swapped: true } : undefined;
+}
+
+// How long to wait before asking the scoreboard again, or null once the whole week is over.
+// It keeps checking even when nothing is live yet, so a game that kicks off later is noticed.
+export function nextPollMs(board, week, now = Date.now()) {
+  const games = SCHEDULE_ALL.filter(g => g.w === week);
+  if (Object.values(board || {}).some(g => g.state === 'in')) return 30000;
+  const start = g => Date.parse(g.t);
+  if (games.every(g => now > start(g) + 5 * 3600000)) return null;                       // the week is over
+  const stateOf = g => { const i = boardFor(board, g.a + '@' + g.h); return i && i.state; };
+  if (games.some(g => now > start(g) - 20 * 60000 && now < start(g) + 4 * 3600000 && stateOf(g) !== 'post')) return 30000;   // starting or just started
+  const next = Math.min(...games.filter(g => start(g) > now).map(start));
+  return next - now < 6 * 3600000 ? 60000 : 300000;
+}
+
+// Adds games that a second scoreboard knows about and the first one doesn't.
+export function mergeBoards(base, extra) {
+  const out = { ...base };
+  Object.entries(extra || {}).forEach(([k, v]) => {
+    const [a, h] = k.split('@');
+    if (!out[k] && !out[h + '@' + a]) out[k] = v;
+  });
+  return out;
+}
+
+const ymd = ms => {
+  const p = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms));
+  return p.replace(/-/g, '');
+};
+
+export async function fetchScoreboard(week, helper, now = Date.now()) {
+  let board = parseScoreboard(await siteJson(NFL + 'scoreboard?seasontype=2&week=' + week + '&dates=' + SEASON, helper));
+  // A game that should be on today but isn't in the week's list (it can be filed differently): ask for that date directly.
+  const missing = SCHEDULE_ALL.filter(g => g.w === week && Math.abs(Date.parse(g.t) - now) < 20 * 3600000 && !boardFor(board, g.a + '@' + g.h));
+  if (missing.length) {
+    const days = [...new Set(missing.map(g => ymd(Date.parse(g.t))))];
+    for (const d of days) {
+      try { board = mergeBoards(board, parseScoreboard(await siteJson(NFL + 'scoreboard?dates=' + d, helper))); } catch (e) { /* the week's list still stands */ }
+    }
+  }
+  return board;
 }
 
 // ── Game summary → flat list of plays, oldest first ──
@@ -71,7 +119,9 @@ export function parsePlays(summary) {
   const seen = new Set();
   const plays = [];
   let lastHome = 0, lastAway = 0;
-  drives.forEach(d => (d.plays || []).forEach(p => {
+  // Some live summaries carry a flat plays list instead of (or as well as) the drives.
+  const flat = summary && Array.isArray(summary.plays) ? [{ plays: summary.plays }] : [];
+  drives.concat(flat).forEach(d => (d.plays || []).forEach(p => {
     if (!p || seen.has(p.id)) return;
     seen.add(p.id);
     const hs = p.homeScore != null ? Number(p.homeScore) : lastHome;
@@ -89,7 +139,7 @@ export function parsePlays(summary) {
       scoring: !!p.scoringPlay,
       scoredBy,
       down: start.downDistanceText || start.shortDownDistanceText || '',
-      offense: start.team && teamIds[start.team.id] || (d.team && normTeam(d.team.abbreviation)) || '',
+      offense: start.team && teamIds[start.team.id] || (d.team && normTeam(d.team.abbreviation)) || (p.team && teamIds[p.team.id]) || '',
       yards: typeof p.statYardage === 'number' ? p.statYardage : null,
       homeScore: hs, awayScore: as
     });

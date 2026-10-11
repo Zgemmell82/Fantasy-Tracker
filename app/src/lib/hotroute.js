@@ -12,6 +12,7 @@
 import { SCHEDULE_ALL } from '../data.js';
 import { projectionFor } from './projections.js';
 import { gameState } from './remaining.js';
+import { boardFor } from './pbp.js';
 import { normTeam } from './teams.js';
 
 // Average points and spread for one starter's whole game, by position (half-PPR-ish).
@@ -58,7 +59,7 @@ export function leagueOutlook(week, lineup, board, now = Date.now(), lookup = nu
   SCHEDULE_ALL.filter(g => g.w === week).forEach(g => { byTeam[g.a] = g; byTeam[g.h] = g; });
   const side = (list, who) => list.map(p => {
     const g = byTeam[normTeam(p.team)];
-    const f = g ? fractionLeft(g, board && board[g.a + '@' + g.h], now) : 0;
+    const f = g ? fractionLeft(g, boardFor(board, g.a + '@' + g.h), now) : 0;
     const k = posKey(p.pos);
     const proj = projectionFor(lookup, p, l.scoring);
     const full = proj != null ? proj : MEAN[k];                              // his whole-game average

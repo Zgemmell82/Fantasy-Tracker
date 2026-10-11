@@ -1,33 +1,48 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { fetchPlays, fetchScoreboard, matchPlays } from './lib/pbp.js';
+import { boardFor, fetchPlays, fetchScoreboard, matchPlays, nextPollMs } from './lib/pbp.js';
 import { fmtPts } from './lib/games.js';
 import { buildRecap } from './lib/recap.js';
 import { Avatar, Icon, LeagueFilter, Segmented, TeamLogo, useLeagueColor } from './ui.jsx';
 
 const visible = () => document.visibilityState === 'visible';
 
-// Live scores, clocks and ESPN game ids for the week; refreshes every 30s while a game is on.
+// Live scores, clocks and ESPN game ids for the week. It refreshes every 30s while a game is on or about to start,
+// less often otherwise, and straight away when the app comes back to the foreground or the connection returns,
+// so a game that kicked off while the app was closed or in the background shows up live.
 export function useScoreboard(week, helper, active) {
   const [board, setBoard] = useState({});
   const [error, setError] = useState('');
   useEffect(() => {
     if (!active) return;
-    let stop = false, timer = 0;
+    let stop = false, timer = 0, busy = false, latest = {};
+    const schedule = ms => { clearTimeout(timer); if (!stop && ms != null) timer = setTimeout(tick, ms); };
     const load = async () => {
+      if (busy) return;
+      busy = true;
       try {
         const sb = await fetchScoreboard(week, helper);
         if (stop) return;
+        latest = sb;
         setBoard(sb);
         setError('');
-        if (Object.values(sb).some(g => g.state === 'in')) timer = setTimeout(tick, 30000);
+        schedule(nextPollMs(sb, week));
       } catch (e) {
-        if (!stop) { setError(e.message); timer = setTimeout(tick, 60000); }
-      }
+        if (!stop) { setError(e.message); schedule(60000); }
+      } finally { busy = false; }
     };
-    const tick = () => { if (visible()) load(); else timer = setTimeout(tick, 30000); };
+    const tick = () => { if (visible()) load(); else schedule(30000); };
+    const wake = () => { if (visible()) load(); };
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('online', wake);
+    window.addEventListener('focus', wake);
     setBoard({});
     load();
-    return () => { stop = true; clearTimeout(timer); };
+    return () => {
+      stop = true; clearTimeout(timer);
+      document.removeEventListener('visibilitychange', wake);
+      window.removeEventListener('online', wake);
+      window.removeEventListener('focus', wake);
+    };
   }, [week, helper, active]);
   return { board, error };
 }
@@ -155,7 +170,7 @@ export function Feed({ game, info, helper, scored, leagues = [] }) {
       {!plays && !feed.error && <div className="feed-empty">Loading plays…</div>}
       {plays && !shown.length && (
         <div className="feed-empty">
-          {filter === 'players' ? 'None of your tracked players have shown up in a play yet.' : filter === 'scoring' ? 'No scoring plays yet.' : 'No plays yet.'}
+          {filter === 'players' ? 'None of your tracked players have shown up in a play yet.' : filter === 'scoring' ? 'No scoring plays yet.' : 'ESPN hasn\'t published any plays for this game yet (ESPN game ' + info.id + ').'}
         </div>
       )}
       {shown.map(p => {
@@ -278,7 +293,7 @@ function AllLive({ games, board, helper, scored }) {
   const [scope, setScope] = useState('live');          // live | week
   const [impact, setImpact] = useState('all');          // all | mine | opp | scoring
   const [limit, setLimit] = useState(SHOW_STEP);
-  const started = games.map(g => ({ g, info: board[g.key] })).filter(x => x.info && x.info.state !== 'pre');
+  const started = games.map(g => ({ g, info: boardFor(board, g.key) })).filter(x => x.info && x.info.state !== 'pre');
   const liveList = started.filter(x => x.info.state === 'in');
   const list = scope === 'live' ? liveList : started;
   const feeds = useGameFeeds(list, helper, list.length > 0);
@@ -342,7 +357,7 @@ export function PlaysScreen({ games, board, boardError, helper, scored, leagues,
   const [open, setOpen] = useState(null);
   const [view, setView] = useState('games');
   const list = games
-    .map(g => ({ g, info: board[g.key] }))
+    .map(g => ({ g, info: boardFor(board, g.key) }))
     .sort((a, b) => (ORDER[a.info ? a.info.state : 'pre'] - ORDER[b.info ? b.info.state : 'pre']));
 
   const nLive = list.filter(x => x.info && x.info.state === 'in').length;
