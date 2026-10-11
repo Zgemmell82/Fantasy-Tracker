@@ -66,3 +66,15 @@ export async function mflExport(type, year, params, apiKey) {
   if (!data || !data.ok) throw new Error((data && data.error) || 'The MyFantasyLeague helper returned something unexpected.');
   return data.data;
 }
+
+// Asks the account's "podcast" function for a few lines of AI-written banter. Throws an Error whose message is
+// 'not_configured' (no AI key set up), 'not_deployed' (function not installed), 'slow_down', or another short reason.
+export async function radioAI(payload) {
+  const { data, error } = await supabase.functions.invoke('podcast', { body: payload });
+  if (error) {
+    const status = error.context && error.context.status;
+    throw new Error(status === 404 ? 'not_deployed' : status === 401 ? 'signed_out' : 'upstream');
+  }
+  if (!data || !data.ok) throw new Error((data && data.error) || 'bad_output');
+  return data.lines;
+}

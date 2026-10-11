@@ -252,7 +252,7 @@ const clockSecs = c => { const m = /^(\d+):(\d+)/.exec(c || ''); return m ? Numb
 
 // Several games' plays at once, refreshed every 20s while any of them is live. Plays are ordered newest first: ones that arrived while
 // the screen was open first, then by quarter and clock (the best ordering across games the data allows).
-function useGameFeeds(list, helper, active) {
+export function useGameFeeds(list, helper, active) {
   const key = list.map(x => x.info.id).join(',');
   const anyLive = list.some(x => x.info.state === 'in');
   const [state, setState] = useState({ byId: {}, at: 0, error: '', loaded: false });

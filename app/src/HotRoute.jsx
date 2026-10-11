@@ -3,6 +3,7 @@ import { hotRoute } from './lib/hotroute.js';
 import { loadProjections } from './lib/projections.js';
 import { gameState } from './lib/remaining.js';
 import { Avatar, Icon, LeagueFilter, PosChip, Sheet, useLeagueColor } from './ui.jsx';
+import Radio from './Radio.jsx';
 import { fmtPts } from './lib/games.js';
 
 const pct = n => Math.round(n * 100);
@@ -111,7 +112,7 @@ function useProjections(week) {
   return { lookup: current ? state.lookup : null, error: current ? state.error : '', loading: !current };
 }
 
-export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board }) {
+export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, helper }) {
   const proj = useProjections(week);
   const [help, setHelp] = useState(false);
   const hr = useMemo(() => hotRoute(week, wk, shown, board, undefined, proj.lookup), [week, wk, shown, board, proj.lookup]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -120,6 +121,8 @@ export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board }
   return (
     <div className="stack">
       <LeagueFilter leagues={leagues} sel={sel} onChange={onSel} />
+
+      {leagues.length > 0 && <Radio week={week} wk={wk} shown={shown} board={board} helper={helper} hr={hr} />}
 
       {!leagues.length && (
         <div className="card empty">
