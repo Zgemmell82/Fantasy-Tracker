@@ -92,6 +92,9 @@ export async function syncSleeper(username, leagueId, week) {
   const mine = rosters.find(r => r.owner_id === uid || (r.co_owners || []).includes(uid));
   if (!mine) throw new Error('Your team isn\'t in that Sleeper league.');
   const ms = (await sj('league/' + leagueId + '/matchups/' + week)) || [];
+  // Reception scoring decides which of Sleeper's projections (standard, half-PPR, PPR) fits this league.
+  const rec = await sj('league/' + leagueId).then(l => l && l.scoring_settings && l.scoring_settings.rec).catch(() => null);
+  const scoring = typeof rec !== 'number' ? undefined : rec >= 0.9 ? 'ppr' : rec >= 0.4 ? 'half' : 'std';
   const me = ms.find(m => m.roster_id === mine.roster_id);
   if (!me) throw new Error('No week ' + week + ' matchup yet.');
   const opp = ms.find(m => m.matchup_id === me.matchup_id && m.roster_id !== me.roster_id);
@@ -103,7 +106,7 @@ export async function syncSleeper(username, leagueId, week) {
   const ids = myIds.concat(opIds);
   players.forEach((p, i) => { if (typeof pts[ids[i]] === 'number') p.pts = pts[ids[i]]; });
   return {
-    mine: players.slice(0, myIds.length), opp: players.slice(myIds.length),
+    mine: players.slice(0, myIds.length), opp: players.slice(myIds.length), ...(scoring ? { scoring } : {}),
     score: { mine: me.custom_points ?? me.points ?? null, opp: opp ? (opp.custom_points ?? opp.points ?? null) : null }
   };
 }

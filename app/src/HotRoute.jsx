@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { hotRoute } from './lib/hotroute.js';
+import { loadProjections } from './lib/projections.js';
 import { gameState } from './lib/remaining.js';
 import { Avatar, Icon, LeagueFilter, PosChip, useLeagueColor } from './ui.jsx';
 import { fmtPts } from './lib/games.js';
@@ -92,8 +93,23 @@ function Section({ title, sub, tone, rows, board, week }) {
   );
 }
 
+// Sleeper's projections for the week; null while loading or if they can't be loaded (the odds then use position averages).
+function useProjections(week) {
+  const [state, setState] = useState({ week: 0, lookup: null, error: '' });
+  useEffect(() => {
+    let stop = false;
+    loadProjections(week)
+      .then(lookup => { if (!stop) setState({ week, lookup, error: '' }); })
+      .catch(e => { if (!stop) setState({ week, lookup: null, error: e.message }); });
+    return () => { stop = true; };
+  }, [week]);
+  const current = state.week === week;
+  return { lookup: current ? state.lookup : null, error: current ? state.error : '', loading: !current };
+}
+
 export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board }) {
-  const hr = useMemo(() => hotRoute(week, wk, shown, board), [week, wk, shown, board]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const proj = useProjections(week);
+  const hr = useMemo(() => hotRoute(week, wk, shown, board, undefined, proj.lookup), [week, wk, shown, board, proj.lookup]);   // eslint-disable-line react-hooks/exhaustive-deps
   const allDone = hr.leagues.length > 0 && hr.leagues.every(o => o.done);
 
   return (
@@ -128,7 +144,13 @@ export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board }
       )}
 
       {hr.leagues.length > 0 && (
-        <p className="hint hr-note">Swing is how many win-probability points a big game (one standard deviation above average) from a player is worth to you, added up across leagues, so a player against you in a league you're winning big barely counts there. Odds assume an average game by position, not projections.</p>
+        <p className="hint hr-note">
+          Swing is how many win-probability points a big game (one standard deviation above average) from a player is worth to you, added up across leagues, so a player against you in a league you're winning big barely counts there.{' '}
+          {proj.loading ? 'Loading Sleeper projections…'
+            : proj.lookup && hr.projectedLeft > 0 ? 'Odds use Sleeper\'s projections for ' + hr.projectedLeft + ' of the ' + hr.playersLeft + ' player spots still to play' + (hr.projectedLeft < hr.playersLeft ? '; the rest use an average game for their position.' : '.')
+            : proj.lookup ? 'Sleeper\'s projections didn\'t match these players, so odds use an average game by position.'
+            : 'Couldn\'t load Sleeper projections' + (proj.error ? ' (' + proj.error + ')' : '') + ', so odds use an average game by position.'}
+        </p>
       )}
     </div>
   );

@@ -68,3 +68,21 @@ test('players whose games are over are left out, and by-hand leagues are marked 
   assert.equal(r.leagues[1].approx, true);
   assert.equal(r.leagues[0].approx, false);
 });
+
+test('a strong projection makes a player matter more than the position average', () => {
+  const wk = { A: { mine: [star], opp: [], score: { mine: 70, opp: 81 } } };      // down 11
+  const avg = hotRoute(5, wk, ['A'], {}, MON);
+  const lookup = { byId: {}, byTeam: {}, byName: {}, count: 1 };
+  lookup.byName['star wideout|LA'] = [20, 22, 24];                               // projected well above the 11-point WR average
+  const proj = hotRoute(5, wk, ['A'], {}, MON, lookup);
+  assert.equal(proj.leagues[0].projectedLeft, 1);
+  assert.equal(avg.leagues[0].projectedLeft, 0);
+  assert.ok(proj.leagues[0].wp > avg.leagues[0].wp + 0.2);                       // he's expected to erase the deficit and then some
+});
+
+test('projections use the league scoring', () => {
+  const lookup = { byId: {}, byTeam: {}, count: 1, byName: { 'star wideout|LA': [8, 10, 12] } };
+  const mk = scoring => leagueOutlook(5, { mine: [star], opp: [], score: { mine: 0, opp: 0 }, scoring }, {}, MON, lookup).exp;
+  assert.ok(mk('ppr') > mk('half') && mk('half') > mk('std'));
+  assert.ok(Math.abs(mk(undefined) - mk('half')) < 1e-9);                        // no scoring recorded: half-PPR
+});

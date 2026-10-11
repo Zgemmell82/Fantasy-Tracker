@@ -185,7 +185,7 @@ function Tracker({ user, onSignOut }) {
       if (!prev.leagues.some(l => l.name === league)) return prev;
       const data = { ...prev.data };
       const wk = { ...(data[week] || seedWeek(week, data, namesOf(prev))) };
-      wk[league] = { mine: lineup.mine.map(mkPlayer), opp: lineup.opp.map(mkPlayer), how, at: Date.now(), ...(lineup.score ? { score: lineup.score } : {}) };
+      wk[league] = { mine: lineup.mine.map(mkPlayer), opp: lineup.opp.map(mkPlayer), how, at: Date.now(), ...(lineup.score ? { score: lineup.score } : {}), ...(lineup.scoring ? { scoring: lineup.scoring } : {}) };
       data[week] = wk;
       return { ...prev, data };
     });

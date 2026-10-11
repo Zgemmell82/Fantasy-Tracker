@@ -6,14 +6,19 @@
 // your opponent's. Adding the swings across leagues is what makes a player a root-for or root-against: a player
 // who is against you in a league you're winning by 80 barely counts there, so he can still be a root-for overall.
 //
-// The odds use average-game assumptions by position (no projections), so they are a guide, not a forecast.
+// With Sleeper's weekly projections each player's average comes from his projection (in the league's scoring);
+// players without one, or when projections can't be loaded, use an average game for their position.
+// Either way the odds are a guide, not a forecast.
 import { SCHEDULE_ALL } from '../data.js';
+import { projectionFor } from './projections.js';
 import { gameState } from './remaining.js';
 import { normTeam } from './teams.js';
 
 // Average points and spread for one starter's whole game, by position (half-PPR-ish).
 const MEAN = { QB: 18, RB: 11, WR: 11, TE: 7.5, K: 8, DEF: 7, IDP: 6 };
 const SD = { QB: 7.5, RB: 6.5, WR: 7, TE: 5, K: 3.5, DEF: 4.5, IDP: 5 };
+// How spread out a game is relative to the player's average, by position (used with a projection).
+const CV = { QB: 0.42, RB: 0.6, WR: 0.62, TE: 0.67, K: 0.45, DEF: 0.65, IDP: 0.8 };
 const KEY = { QB: 'QB', RB: 'RB', FB: 'RB', WR: 'WR', TE: 'TE', K: 'K', PK: 'K', DEF: 'DEF' };
 const posKey = pos => KEY[String(pos || '').toUpperCase()] || 'IDP';
 
@@ -46,7 +51,8 @@ const total = list => list.reduce((n, p) => n + (typeof p.pts === 'number' ? p.p
 const hasPts = list => list.some(p => typeof p.pts === 'number');
 
 // One league's matchup right now: scores, what's left on each side, win probability.
-export function leagueOutlook(week, lineup, board, now = Date.now()) {
+// lookup: Sleeper projections (optional). Players it has no number for use the position average.
+export function leagueOutlook(week, lineup, board, now = Date.now(), lookup = null) {
   const l = lineup || { mine: [], opp: [] };
   const byTeam = {};
   SCHEDULE_ALL.filter(g => g.w === week).forEach(g => { byTeam[g.a] = g; byTeam[g.h] = g; });
@@ -54,7 +60,10 @@ export function leagueOutlook(week, lineup, board, now = Date.now()) {
     const g = byTeam[normTeam(p.team)];
     const f = g ? fractionLeft(g, board && board[g.a + '@' + g.h], now) : 0;
     const k = posKey(p.pos);
-    return { p, who, f, mean: MEAN[k] * f, sd: SD[k] * Math.sqrt(f), game: g || null };
+    const proj = projectionFor(lookup, p, l.scoring);
+    const full = proj != null ? proj : MEAN[k];                              // his whole-game average
+    const spread = proj != null ? Math.max(2, CV[k] * proj) : SD[k];
+    return { p, who, f, mean: full * f, sd: spread * Math.sqrt(f), projected: proj != null, game: g || null };
   });
   const mine = side(l.mine, 'mine'), opp = side(l.opp, 'opp');
   const known = l.score && (l.score.mine != null || l.score.opp != null);
@@ -69,7 +78,8 @@ export function leagueOutlook(week, lineup, board, now = Date.now()) {
     done: sd < 1e-9,
     approx: !known && !hasPts(l.mine) && !hasPts(l.opp),     // no scores to go on (a by-hand league)
     mine, opp,
-    leftMine: mine.filter(x => x.f > 0).length, leftOpp: opp.filter(x => x.f > 0).length
+    leftMine: mine.filter(x => x.f > 0).length, leftOpp: opp.filter(x => x.f > 0).length,
+    projectedLeft: [...mine, ...opp].filter(x => x.f > 0 && x.projected).length
   };
 }
 
@@ -82,14 +92,15 @@ function boom(o, x) {
 
 // leagues: names in display order. Returns the leagues' outlooks and the players ranked into
 // rootFor, rootAgainst and wash (for you in some leagues and against you in others, cancelling out).
-export function hotRoute(week, wk, leagues, board, now = Date.now()) {
-  const outlooks = leagues.map(name => ({ name, ...leagueOutlook(week, wk[name], board, now) }));
+export function hotRoute(week, wk, leagues, board, now = Date.now(), lookup = null) {
+  const outlooks = leagues.map(name => ({ name, ...leagueOutlook(week, wk[name], board, now, lookup) }));
   const byPlayer = new Map();
   outlooks.forEach(o => [...o.mine, ...o.opp].forEach(x => {
     if (x.f <= 0) return;                                  // already played: nothing left to root for
     const key = normTeam(x.p.team) + '|' + String(x.p.name).toLowerCase();
     if (!byPlayer.has(key)) byPlayer.set(key, { key, player: x.p, f: x.f, game: x.game, net: 0, lines: [] });
     const r = byPlayer.get(key);
+    r.projected = r.projected || x.projected;
     const swing = boom(o, x);
     r.net += swing;
     r.lines.push({ league: o.name, side: x.who, swing, diff: o.diff, wp: o.wp, done: o.done });
@@ -102,5 +113,5 @@ export function hotRoute(week, wk, leagues, board, now = Date.now()) {
   const rootAgainst = rows.filter(r => r.net <= -MIN_SWING).sort((a, b) => a.net - b.net);
   const wash = rows.filter(r => Math.abs(r.net) < MIN_SWING && r.both
     && r.lines.some(l => Math.abs(l.swing) >= MIN_SWING)).sort((a, b) => a.player.name.localeCompare(b.player.name));
-  return { leagues: outlooks, rootFor, rootAgainst, wash };
+  return { leagues: outlooks, rootFor, rootAgainst, wash, playersLeft: outlooks.reduce((n, o) => n + o.leftMine + o.leftOpp, 0), projectedLeft: outlooks.reduce((n, o) => n + o.projectedLeft, 0) };
 }
