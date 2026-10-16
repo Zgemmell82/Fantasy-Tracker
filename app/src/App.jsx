@@ -6,7 +6,7 @@ import { cloudState, hydrate, legacyDb, userKey } from './lib/account.js';
 import { gameFor, gameState, leagueRemaining } from './lib/remaining.js';
 import { alignByPosition } from './lib/lineup.js';
 import { loadInjuries } from './lib/injuries.js';
-import { alertKey, alertSummary, lineupAlerts } from './lib/alerts.js';
+import { alertKey, alertSummary, applyChecks, lineupAlerts } from './lib/alerts.js';
 import { getTheme, setTheme } from './lib/theme.js';
 import { pullState, pushState, supabase } from './lib/cloud.js';
 import { AuthScreen, NewPassword, SetupNeeded, Splash, useSession } from './Auth.jsx';
@@ -372,7 +372,15 @@ function Tracker({ user, onSignOut }) {
   const colorOf = name => colors[name] || LEAGUE_COLORS[0];
   // Starters who won't play, may not play, or are on a bye, for every league (the filter narrows what's shown).
   const alerts = inj.lookup || !db.leagues.length ? lineupAlerts(week, wk, names, inj.lookup, board) : [];
-  const alertCounts = alertSummary(alerts).byLeague;
+  const [acks, setAcks] = useState(() => load('ff-lc-ack-' + week, {}));
+  useEffect(() => { setAcks(load('ff-lc-ack-' + week, {})); }, [week]);
+  const setAck = useCallback((key, sev) => setAcks(prev => {
+    const next = { ...prev };
+    if (sev == null) delete next[key]; else next[key] = sev;
+    save('ff-lc-ack-' + week, next);
+    return next;
+  }), [week]);
+  const alertCounts = alertSummary(applyChecks(alerts, acks).open).byLeague;
   const now = Date.now();
   const remain = Object.fromEntries(names.map(n => [n, leagueRemaining(week, wk[n], board, now)]));
 
@@ -406,7 +414,7 @@ function Tracker({ user, onSignOut }) {
 
       <main className="body" key={screen}>
         {screen === 'games'
-          ? <Games week={week} wk={wk} names={shown} leagues={names} sel={sel} onSel={setLgSel} scored={scoredWeek} filter={filter} setFilter={setFilter} onToggle={toggleScored} board={board} helper={db.espnHelper} alerts={alerts.filter(a => a.leagues.some(l => shown.includes(l)))} injReady={!!inj.lookup} injError={inj.error} />
+          ? <Games week={week} wk={wk} names={shown} leagues={names} sel={sel} onSel={setLgSel} scored={scoredWeek} filter={filter} setFilter={setFilter} onToggle={toggleScored} board={board} helper={db.espnHelper} alerts={alerts.filter(a => a.leagues.some(l => shown.includes(l)))} acks={acks} setAck={setAck} injReady={!!inj.lookup} injError={inj.error} />
           : screen === 'hot'
           ? <HotRoute week={week} wk={wk} leagues={names} shown={shown} sel={sel} onSel={setLgSel} board={board} helper={db.espnHelper} />
           : screen === 'plays'
@@ -513,16 +521,21 @@ function Flag({ a }) {
 }
 
 // The lineup check: your starters who are out, doubtful, questionable or on a bye, and the same on your opponents'.
-function LineupCheck({ alerts, ready, error }) {
+function LineupCheck({ alerts, acks, setAck, ready, error }) {
   const [all, setAll] = useState(false);
+  const [showDone, setShowDone] = useState(false);
+  const [leaving, setLeaving] = useState([]);
+  const check = a => { setLeaving(l => [...l, a.key]); setTimeout(() => { setAck(a.key, a.severity); setLeaving(l => l.filter(k => k !== a.key)); }, 350); };
   const [shut, setShut] = useState(() => { try { return localStorage.getItem('ff-lc-shut') === '1'; } catch (e) { return false; } });
   const toggle = () => setShut(v => { try { localStorage.setItem('ff-lc-shut', v ? '0' : '1'); } catch (e) { /* private mode */ } return !v; });
   if (!ready) return error ? <div className="card lc"><div className="lc-head"><Icon.alert size={16} sw={2.5} /><b>Lineup check</b><span className="lc-sub">couldn't load injury reports</span></div></div> : null;
-  const mine = alerts.filter(a => a.side === 'mine'), theirs = alerts.filter(a => a.side === 'opp');
+  const { open, checked } = applyChecks(alerts, acks);
+  const mine = open.filter(a => a.side === 'mine'), theirs = open.filter(a => a.side === 'opp');
   const serious = mine.some(a => a.severity >= 2);
-  const rows = (list, side) => (all ? list : list.slice(0, 4)).map(a => (
-    <div className="lc-row" key={a.key}>
-      <Avatar p={a.player} size={34} side={side} />
+  const rows = (list, side, done) => (all || done ? list : list.slice(0, 4)).map(a => (
+    <div className={'lc-row' + (done ? ' checked' : '') + (leaving.includes(a.key) ? ' leaving' : '')} key={a.key}>
+      <button className={'lc-check' + (done ? ' on' : '')} aria-pressed={done} aria-label={(done ? 'Put back: ' : 'Check off: ') + a.player.name} onClick={() => done ? setAck(a.key, null) : check(a)}>{done && <Icon.check size={13} sw={3.5} />}</button>
+      <Avatar p={a.player} size={34} side={done ? a.side : side} />
       <div className="lc-main">
         <div className="lc-name">{a.player.name}</div>
         <div className="prow-meta"><PosChip pos={a.player.pos} /><span>{a.player.team}</span><Flag a={a} />
@@ -546,6 +559,8 @@ function LineupCheck({ alerts, ready, error }) {
       {theirs.length > 0 && <div className="lc-h good"><i />Good news: your opponents are missing</div>}
       {theirs.length > 0 && <div className="lc-list">{rows(theirs, 'opp')}</div>}
       {more && <button className="pill-btn lc-more" onClick={() => setAll(!all)}>{more}</button>}
+      {checked.length > 0 && <button className="lc-undo" onClick={() => setShowDone(v => !v)}>{showDone ? 'Hide' : 'Show'} {checked.length} checked off</button>}
+      {showDone && checked.length > 0 && <div className="lc-list">{rows(checked, 'mine', true)}</div>}
       </>}
     </section>
   );
@@ -559,7 +574,7 @@ function StatusPill({ status }) {
   return <span className={'spill' + (status === 'Final' ? ' final' : '')}>{status}</span>;
 }
 
-function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter, onToggle, board, helper, alerts, injReady, injError }) {
+function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter, onToggle, board, helper, alerts, acks, setAck, injReady, injError }) {
   const flags = Object.fromEntries(alerts.map(a => [a.key, a]));
   const [pbp, setPbp] = useState(null);
   const { games, bye } = groupByGame(week, wk, undefined, names);
@@ -593,7 +608,7 @@ function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter
         <div className="sum-foot">{done} of {all.length} checked off</div>
       </div>
 
-      <LineupCheck alerts={alerts} ready={injReady} error={injError} />
+      <LineupCheck alerts={alerts} acks={acks} setAck={setAck} ready={injReady} error={injError} />
 
       <Segmented value={filter} onChange={setFilter} options={[['all', 'All games'], ['mine', 'My players']]} />
       <LeagueFilter leagues={leagues} sel={sel} onChange={onSel} />

@@ -695,3 +695,10 @@ button.lrow:active { background: var(--surface-3); }
 .lc-toggle { background: none; border: 0; padding: 0; color: inherit; font: inherit; width: 100%; text-align: left; cursor: pointer; }
 .lc-toggle .lc-pill { margin-left: auto; }
 .lc-toggle .chev { margin-left: 4px; } .lc-toggle .chev.open { transform: rotate(180deg); }
+
+.lc-row { transition: opacity .3s, transform .3s; }
+.lc-row.leaving { opacity: 0; transform: translateX(14px); }
+.lc-row.checked { opacity: .5; }
+.lc-check { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--faint); background: none; color: var(--bg, #000); display: grid; place-items: center; padding: 0; cursor: pointer; }
+.lc-check.on { background: var(--mint); border-color: var(--mint); }
+.lc-undo { background: none; border: 0; color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 600; text-align: left; padding: 2px 0; cursor: pointer; }

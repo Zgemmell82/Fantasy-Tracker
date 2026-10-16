@@ -67,3 +67,20 @@ test('summarizes your own problems per league', () => {
   assert.equal(s.theirs, 1);
   assert.deepEqual(s.byLeague, { Alpha: 3, Beta: 1 });
 });
+
+import { applyChecks } from './alerts.js';
+test('checked-off alerts hide until they get worse', () => {
+  const a = (key, severity) => ({ key, severity });
+  const r = applyChecks([a('x', 1), a('y', 1), a('z', 3)], { x: 1, z: 1 });
+  assert.deepEqual(r.checked.map(v => v.key), ['x']);          // still Questionable: stays checked
+  assert.deepEqual(r.open.map(v => v.key), ['y', 'z']);        // z went Q -> Out: back on the list
+});
+
+test('drops a player from the list once his game has started', () => {
+  const board = { 'BUF@LA': { state: 'in' } };
+  const only = { Alpha: { mine: [{ name: 'Davante Adams', pos: 'WR', team: 'LA' }], opp: [] } };
+  assert.equal(lineupAlerts(5, only, ['Alpha'], inj, {}, SAT).length, 1);
+  const kicked = Date.parse('2026-10-13T00:30:00Z');                            // Monday night, just after kickoff
+  const after = lineupAlerts(5, only, ['Alpha'], inj, board, kicked);
+  assert.equal(after.length, 0);
+});
