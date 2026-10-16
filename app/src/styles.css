@@ -691,3 +691,7 @@ button.lrow:active { background: var(--surface-3); }
 .mu-right { display: grid; justify-items: end; gap: 1px; }
 .mu-proj, .mu-pj { font-size: 11px; opacity: .6; font-variant-numeric: tabular-nums; font-weight: 500; }
 .mu-team .mu-pj { display: block; }
+
+.lc-toggle { background: none; border: 0; padding: 0; color: inherit; font: inherit; width: 100%; text-align: left; cursor: pointer; }
+.lc-toggle .lc-pill { margin-left: auto; }
+.lc-toggle .chev { margin-left: 4px; } .lc-toggle .chev.open { transform: rotate(180deg); }

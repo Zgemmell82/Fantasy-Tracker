@@ -515,6 +515,8 @@ function Flag({ a }) {
 // The lineup check: your starters who are out, doubtful, questionable or on a bye, and the same on your opponents'.
 function LineupCheck({ alerts, ready, error }) {
   const [all, setAll] = useState(false);
+  const [shut, setShut] = useState(() => { try { return localStorage.getItem('ff-lc-shut') === '1'; } catch (e) { return false; } });
+  const toggle = () => setShut(v => { try { localStorage.setItem('ff-lc-shut', v ? '0' : '1'); } catch (e) { /* private mode */ } return !v; });
   if (!ready) return error ? <div className="card lc"><div className="lc-head"><Icon.alert size={16} sw={2.5} /><b>Lineup check</b><span className="lc-sub">couldn't load injury reports</span></div></div> : null;
   const mine = alerts.filter(a => a.side === 'mine'), theirs = alerts.filter(a => a.side === 'opp');
   const serious = mine.some(a => a.severity >= 2);
@@ -532,16 +534,19 @@ function LineupCheck({ alerts, ready, error }) {
   const more = mine.length + theirs.length > 8 ? (all ? 'Show fewer' : 'Show all ' + (mine.length + theirs.length)) : null;
   return (
     <section className="card lc" aria-label="Lineup check">
-      <div className="lc-head">
+      <button className="lc-head lc-toggle" onClick={toggle} aria-expanded={!shut}>
         {mine.length ? <Icon.alert size={16} sw={2.5} /> : <Icon.check size={16} sw={3} />}
         <b>Lineup check</b>
         <span className={'lc-pill' + (mine.length ? (serious ? ' bad' : ' warn') : ' ok')}>{mine.length ? mine.length + ' to check' : 'All clear'}</span>
-      </div>
+        <span className={'chev' + (shut ? '' : ' open')}><Icon.chevron size={16} sw={2.5} /></span>
+      </button>
+      {!shut && <>
       {!mine.length && <p className="lc-sub">None of your starters are out, doubtful, questionable or on a bye.</p>}
       {mine.length > 0 && <div className="lc-list">{rows(mine, 'mine')}</div>}
       {theirs.length > 0 && <div className="lc-h good"><i />Good news: your opponents are missing</div>}
       {theirs.length > 0 && <div className="lc-list">{rows(theirs, 'opp')}</div>}
       {more && <button className="pill-btn lc-more" onClick={() => setAll(!all)}>{more}</button>}
+      </>}
     </section>
   );
 }
