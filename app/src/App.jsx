@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PLAYERS } from './data.js';
 import { load, save } from './lib/store.js';
 import { SEASON, WEEKS, currentWeek, seedWeek } from './lib/season.js';
@@ -11,17 +11,16 @@ import { getTheme, setTheme } from './lib/theme.js';
 import { pullState, pushState, supabase } from './lib/cloud.js';
 import { AuthScreen, NewPassword, SetupNeeded, Splash, useSession } from './Auth.jsx';
 import { mkPlayer } from './lib/teams.js';
-import { Avatar, Icon, LEAGUE_COLORS, LeagueColors, LeagueFilter, PosChip, Segmented, Sheet, Switch, TeamLogo, useLeagueColor } from './ui.jsx';
+import { Avatar, Icon, LEAGUE_COLORS, LeagueColors, LeagueFilter, PosChip, Segmented, Sheet, Switch, useLeagueColor } from './ui.jsx';
 import { fmtPts, groupByGame, liveNow, weekStarted } from './lib/games.js';
 import { matchSleeperLeague, sleeperLeagues, syncSleeper } from './lib/sleeper.js';
 import { syncEspn } from './lib/espn.js';
 import { syncMfl } from './lib/mfl.js';
 import { syncYahoo, yahooLeagues, startYahooSignIn, yahooStatus, yahooDisconnect, yahooFinish } from './lib/yahoo.js';
 import { takeYahooCode } from './lib/yahoo-return.js';
-import { Feed, GameStatus, PlaysScreen, useScoreboard } from './Plays.jsx';
-import { boardFor } from './lib/pbp.js';
+import { PlaysScreen, useScoreboard } from './Plays.jsx';
 import HotRoute, { useProjections } from './HotRoute.jsx';
-import { MatchCell, inRz } from './MatchCell.jsx';
+import { MatchCell } from './MatchCell.jsx';
 import LeagueBoard from './Home.jsx';
 import { leagueOutlook } from './lib/hotroute.js';
 import { normTeam } from './lib/teams.js';
@@ -416,7 +415,7 @@ function Tracker({ user, onSignOut }) {
 
       <main className="body" key={screen}>
         {screen === 'games'
-          ? <Games week={week} wk={wk} names={shown} leagues={names} sel={sel} onSel={setLgSel} scored={scoredWeek} filter={filter} setFilter={setFilter} onToggle={toggleScored} board={board} helper={db.espnHelper} onMatchup={setMatchupFor} alerts={alerts.filter(a => a.leagues.some(l => shown.includes(l)))} acks={acks} setAck={setAck} injReady={!!inj.lookup} injError={inj.error} />
+          ? <Games week={week} wk={wk} names={shown} leagues={names} sel={sel} onSel={setLgSel} board={board} onMatchup={setMatchupFor} alerts={alerts.filter(a => a.leagues.some(l => shown.includes(l)))} acks={acks} setAck={setAck} injReady={!!inj.lookup} injError={inj.error} />
           : screen === 'hot'
           ? <HotRoute week={week} wk={wk} leagues={names} shown={shown} sel={sel} onSel={setLgSel} board={board} helper={db.espnHelper} />
           : screen === 'plays'
@@ -502,20 +501,6 @@ function TagList({ leagues, pts, showPts }) {
   );
 }
 
-function PlayerRow({ p, side, done, showPts, onToggle, flag, rz }) {
-  return (
-    <button className={'prow' + (done ? ' done' : '')} onClick={onToggle} aria-pressed={done}>
-      <Avatar p={p} side={side} />
-      <span className="prow-main">
-        <span className="prow-name">{p.name}</span>
-        <span className="prow-meta"><PosChip pos={p.pos} /><span>{p.team}</span>{rz && <em className="flag rz" title="His team is in the red zone">RZ</em>}{flag && <Flag a={flag} />}</span>
-      </span>
-      <TagList leagues={p.leagues} pts={p.pts} showPts={showPts} />
-      <span className="prow-check" aria-hidden="true">{done ? <Icon.check size={14} sw={3} /> : null}</span>
-    </button>
-  );
-}
-
 // A short status tag for a starter who won't play or may not play.
 function Flag({ a }) {
   const text = a.kind === 'bye' ? 'BYE' : a.kind === 'out' ? a.label.toUpperCase() : a.kind === 'doubtful' ? 'D' : 'Q';
@@ -569,32 +554,14 @@ function LineupCheck({ alerts, acks, setAck, ready, error }) {
 }
 
 
-function StatusPill({ status }) {
-  if (status === 'Live') return <span className="spill live"><i />Live</span>;
-  return <span className={'spill' + (status === 'Final' ? ' final' : '')}>{status}</span>;
-}
-
-function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter, onToggle, board, helper, alerts, acks, setAck, injReady, injError, onMatchup }) {
-  const flags = Object.fromEntries(alerts.map(a => [a.key, a]));
-  const [pbp, setPbp] = useState(null);
+function Games({ week, wk, names, leagues, sel, onSel, board, alerts, acks, setAck, injReady, injError, onMatchup }) {
   const { games, bye } = groupByGame(week, wk, undefined, names);
-  // A game is over when ESPN says it's final, or, without ESPN, once its kickoff clock has run out.
-  const isOver = g => boardFor(board, g.key) ? boardFor(board, g.key).state === 'post' : g.status === 'Final';
-  const picked = games.filter(g => filter === 'all' || g.mine.length);
-  // Games still to play or in progress come first; finished games, with every player done, sink to the bottom.
-  const shown = [...picked.filter(g => !isOver(g)), ...picked.filter(isOver)];
-  const firstOver = shown.length > picked.filter(isOver).length ? shown.find(isOver) : null;   // label only when something is above it
-  if (filter === 'all' && (bye.mine.length || bye.theirs.length)) {
-    shown.push({ key: 'bye', bye: true, title: 'Bye or unmatched', time: 'No game this week for these teams', status: 'Check', ...bye });
-  }
-  // Totals cover the whole week whatever the filter, and count lineup spots: a player started
-  // in two leagues fills two spots, so with full lineups both sides come out equal.
+  // Totals cover the whole week, and count lineup spots: a player started in two leagues fills two spots,
+  // so with full lineups both sides come out equal.
   const everyGame = games.concat([{ status: 'Check', ...bye }]);
-  const all = everyGame.flatMap(g => g.mine.concat(g.theirs));
   const spots = list => list.reduce((n, p) => n + p.leagues.length, 0);
   const yours = everyGame.reduce((n, g) => n + spots(g.mine), 0);
   const against = everyGame.reduce((n, g) => n + spots(g.theirs), 0);
-  const done = everyGame.reduce((n, g) => n + g.mine.concat(g.theirs).filter(p => isDone(scored[p.uid], g.status === 'Final' && !!p.pts)).length, 0);
 
   return (
     <div className="stack">
@@ -602,10 +569,6 @@ function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter
         <div className="sum-cell"><span className="sum-n">{games.length}</span><span className="sum-l">Games</span></div>
         <div className="sum-cell"><span className="sum-n mint">{yours}</span><span className="sum-l">Your starters</span></div>
         <div className="sum-cell"><span className="sum-n coral">{against}</span><span className="sum-l">Against you</span></div>
-        <div className="sum-bar" aria-label={done + ' of ' + all.length + ' checked off'}>
-          <span style={{ width: (all.length ? (done / all.length) * 100 : 0) + '%' }} />
-        </div>
-        <div className="sum-foot">{done} of {all.length} checked off</div>
       </div>
 
       <LineupCheck alerts={alerts} acks={acks} setAck={setAck} ready={injReady} error={injError} />
@@ -614,58 +577,13 @@ function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter
 
       <LeagueBoard week={week} wk={wk} names={names} board={board} onMatchup={onMatchup} />
 
-      <div className="hb-games-h">Games<span>every NFL game with your players</span></div>
-      <Segmented value={filter} onChange={setFilter} options={[['all', 'All games'], ['mine', 'My players']]} />
-
-      {shown.map(g => {
-        const [away, home] = g.bye ? [null, null] : g.key.split('@');
-        return (
-          <Fragment key={g.key}>
-          {g === firstOver && <div className="over-label"><span>Finished</span></div>}
-          <section className="card game">
-            <div className="game-head">
-              {g.bye
-                ? <div className="matchup"><span className="bye-t">{g.title}</span></div>
-                : <div className="matchup">
-                    <TeamLogo team={away} size={30} /><span className="abbr">{away}</span>
-                    <span className="at">@</span>
-                    <TeamLogo team={home} size={30} /><span className="abbr">{home}</span>
-                  </div>}
-              {g.bye ? <StatusPill status={g.status} /> : boardFor(board, g.key) ? <GameStatus game={g} info={boardFor(board, g.key)} /> : <StatusPill status={g.status} />}
-            </div>
-            <div className="game-time">{g.time}</div>
-            {g.mine.length > 0 && (
-              <div className="side">
-                <div className="side-h mint"><i />Your players</div>
-                {g.mine.map(p => { const auto = g.status === 'Final' && !!p.pts; return <PlayerRow key={p.uid} p={p} side="mine" rz={inRz(board, g, p)} flag={flags[alertKey("mine", p)]} showPts={g.status !== 'Upcoming'} done={isDone(scored[p.uid], auto)} onToggle={() => onToggle(p.uid, auto)} />; })}
-              </div>
-            )}
-            {g.theirs.length > 0 && (
-              <div className="side">
-                <div className="side-h coral"><i />Against you</div>
-                {g.theirs.map(p => { const auto = g.status === 'Final' && !!p.pts; return <PlayerRow key={p.uid} p={p} side="opp" rz={inRz(board, g, p)} flag={flags[alertKey("opp", p)]} showPts={g.status !== 'Upcoming'} done={isDone(scored[p.uid], auto)} onToggle={() => onToggle(p.uid, auto)} />; })}
-              </div>
-            )}
-            {!g.bye && (
-              <>
-                <button className={'pbp-toggle' + (pbp === g.key ? ' open' : '')} onClick={() => setPbp(pbp === g.key ? null : g.key)} aria-expanded={pbp === g.key}>
-                  <Icon.activity size={15} sw={2.5} />Play-by-play<span className="chev"><Icon.chevron size={16} sw={2.5} /></span>
-                </button>
-                {pbp === g.key && <Feed game={g} info={boardFor(board, g.key)} helper={helper} scored={scored} leagues={leagues} />}
-              </>
-            )}
-          </section>
-          </Fragment>
-        );
-      })}
-
-      {shown.length
-        ? <p className="hint">Tap a player to check them off once their game is done.</p>
-        : <div className="card empty">
-            <Icon.football size={28} />
-            <div className="empty-t">No lineups for week {week}</div>
-            <div className="empty-d">Connect a league in the Locker Room tab, or add players by hand.</div>
-          </div>}
+      {!names.length && (
+        <div className="card empty">
+          <Icon.football size={28} />
+          <div className="empty-t">No leagues yet</div>
+          <div className="empty-d">Add a league in the Locker Room tab to see your matchups here.</div>
+        </div>
+      )}
     </div>
   );
 }
