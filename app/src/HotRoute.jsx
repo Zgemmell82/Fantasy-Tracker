@@ -108,7 +108,6 @@ function Row({ r, tone, board, week }) {
           {best != null && <span className="boom-badge" title={boomHelp}>BOOM<em>{sgn(Math.round(best * 100))} over projection</em></span>}</div>
         <div className="hr-lines">
           {r.lines.map(l => {
-            const p = pct(l.swing);
             const o = l.over == null ? null : Math.round(l.over * 100);
             // Green when it's good for you: a player of yours over his projection, or one you're facing under it.
             const good = o == null || o === 0 ? '' : ((o > 0) === (l.side === 'mine') ? 'up' : 'down');
@@ -118,7 +117,7 @@ function Row({ r, tone, board, week }) {
                 <span className={'hr-role ' + l.side}>{l.side === 'mine' ? 'Yours' : 'Against'}</span>
                 <b className={'hr-over ' + (good || 'none')}>{o == null ? '—' : sgn(o)}</b>
                 <span className="hr-pts">{l.pts == null || !l.started ? '—' : fmtPts(l.pts)}<i> (proj: {l.proj == null ? '—' : fmtPts(Math.round(l.proj * 10) / 10)})</i></span>
-                <span className="hr-sit">{l.done ? 'final' : situation(l.diff) + (p === 0 ? '' : ' · ' + sgn(p) + ' win chance if he booms')}</span>
+                <span className="hr-sit">{l.done ? 'final' : situation(l.diff)}</span>
               </div>
             );
           })}
