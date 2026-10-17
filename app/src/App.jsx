@@ -405,7 +405,7 @@ function Tracker({ user, onSignOut }) {
         <div className="head-row">
           <div>
             <div className="eyebrow">{SEASON} season{screen === 'games' ? ' · Week ' + week : ''}</div>
-            <h1 className="title">{screen === 'games' ? 'The Huddle' : screen === 'plays' ? 'Game Film' : screen === 'hot' ? 'Two-Minute Drill' : 'Locker Room'}</h1>
+            <h1 className="title">{screen === 'games' ? 'The Huddle' : screen === 'plays' ? 'Live Feed' : screen === 'hot' ? 'Two-Minute Drill' : 'Locker Room'}</h1>
           </div>
           <button className={'icon-btn' + (syncing ? ' spinning' : '')} disabled={syncing} onClick={() => syncAll(false)} aria-label="Sync connected leagues">
             <Icon.refresh size={19} />
@@ -428,7 +428,7 @@ function Tracker({ user, onSignOut }) {
 
       <nav className="tabbar">
         <button className={screen === 'games' ? 'on' : ''} onClick={() => setScreen('games')}><Icon.football size={23} /><span>The Huddle</span></button>
-        <button className={screen === 'plays' ? 'on' : ''} onClick={() => setScreen('plays')}><Icon.activity size={23} /><span>Game Film</span></button>
+        <button className={screen === 'plays' ? 'on' : ''} onClick={() => setScreen('plays')}><Icon.activity size={23} /><span>Live Feed</span></button>
         <button className={screen === 'hot' ? 'on' : ''} onClick={() => setScreen('hot')}><Icon.route size={23} /><span>2-Min Drill</span></button>
         <button className={screen === 'leagues' ? 'on' : ''} onClick={() => setScreen('leagues')}><Icon.trophy size={23} /><span>Locker Room</span></button>
       </nav>
