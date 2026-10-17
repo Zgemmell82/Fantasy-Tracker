@@ -5,8 +5,9 @@ const INJURY = /\binjur|carted|helped off|locker room|trainer|evaluated for|limp
 export const isInjuryText = text => INJURY.test(String(text || ''));
 
 // 'help' when the play is good for you: points for your player, or points lost by a player you're facing.
+// 'none' when the play is worth nothing to the player (no points either way).
 export function effectOf(side, est, injury) {
-  if (injury && !est) return side === 'mine' ? 'hurt' : 'help';
+  if (!est) return injury ? (side === 'mine' ? 'hurt' : 'help') : 'none';
   return (side === 'mine') === (est > 0) ? 'help' : 'hurt';
 }
 

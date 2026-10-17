@@ -10,3 +10,10 @@ test('reads reception scoring from ESPN league settings', () => {
   assert.equal(espnScoring({}), undefined);
   assert.equal(espnScoring({ settings: { scoringSettings: { scoringItems: [{ statId: 24, points: 0.1 }] } } }), undefined);
 });
+
+import { espnMatchupPeriod } from './espn.js';
+test('maps an NFL week to ESPN\'s matchup period', () => {
+  assert.equal(espnMatchupPeriod({}, 5), 5);
+  assert.equal(espnMatchupPeriod({ settings: { scheduleSettings: { matchupPeriods: { 1: [1], 2: [2], 15: [15, 16] } } } }, 16), 15);
+  assert.equal(espnMatchupPeriod({ settings: { scheduleSettings: { matchupPeriods: { 1: [1] } } } }, 5), 5);
+});

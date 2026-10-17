@@ -38,7 +38,7 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; }
-html, body, #root { height: 100%; }
+html, body, #root { height: 100%; height: 100dvh; margin: 0; overflow: hidden; overscroll-behavior: none; }
 body {
   margin: 0; background: var(--bg); color: var(--text);
   font-family: var(--font); font-size: 15px; line-height: 1.4;
@@ -54,7 +54,8 @@ input { font: inherit; }
 .sc::-webkit-scrollbar { display: none; }
 
 /* ── Shell ─────────────────────────────────────────────── */
-.app { position: relative; height: 100%; max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+/* The app is pinned to the visible viewport (dvh follows the phone's address bar), so the tab bar sits flush at the bottom. */
+.app { position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: min(100%, 560px); height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
 .head {
   flex: none; position: relative; z-index: 5;
   padding: calc(var(--safe-top) + 10px) 16px 10px;
@@ -87,17 +88,6 @@ input { font: inherit; }
 .card { background: var(--surface); border-radius: var(--r-card); }
 .hint { margin: 6px 4px 0; font-size: 13px; color: var(--faint); text-align: center; }
 
-/* ── Summary ───────────────────────────────────────────── */
-.summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 16px 16px 14px; row-gap: 14px; }
-.sum-cell { display: flex; flex-direction: column; gap: 2px; }
-.sum-cell + .sum-cell { padding-left: 14px; border-left: 1px solid var(--line); }
-.sum-n { font-family: var(--font-display); font-size: 28px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.05; }
-.sum-n.mint { color: var(--mint); }
-.sum-n.coral { color: var(--coral); }
-.sum-l { font-size: 12px; font-weight: 600; color: var(--muted); }
-.sum-bar { grid-column: 1 / -1; height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
-.sum-bar span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--mint), var(--mint-2)); transition: width .45s var(--ease); }
-.sum-foot { grid-column: 1 / -1; margin-top: -8px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* ── Segmented control ─────────────────────────────────── */
 .segmented { position: relative; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); padding: 3px; border-radius: var(--r-ctl); background: var(--surface); }
@@ -377,12 +367,9 @@ button.lrow:active { background: var(--surface-3); }
 .lg-chip em { font-style: normal; font-weight: 800; letter-spacing: 0.02em; margin-left: 2px; }
 .lg-chip.mine em { color: var(--mint); }
 .lg-chip.opp em { color: var(--coral); }
-.hit.mine { background: color-mix(in srgb, var(--mint) 12%, transparent); }
-.hit.opp { background: color-mix(in srgb, var(--coral) 12%, transparent); }
 .hit.done { opacity: .6; }
 .hit-est { font-weight: 800; font-variant-numeric: tabular-nums; }
-.hit.mine .hit-est { color: var(--mint); }
-.hit.opp .hit-est { color: var(--coral); }
+.hit .hit-est { color: var(--muted); }
 .hit-est.neg { opacity: .85; }
 .hit-lg { display: inline-flex; gap: 2px; }
 .hit-lg i { width: 6px; height: 6px; border-radius: 50%; }
@@ -711,7 +698,7 @@ button.lrow:active { background: var(--surface-3); }
 .hit-fx { margin-left: auto; font-style: normal; font-size: 11px; font-weight: 800; }
 .hit.fx-help { border-left: 3px solid var(--mint); } .hit.fx-hurt { border-left: 3px solid var(--coral); }
 .pg-all { align-self: flex-end; }
-.gp { padding: 4px 14px 8px; display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.gp { padding: 4px 14px 8px; display: flex; flex-direction: column; }
 .gp-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
 .gp-row + .gp-row { border-top: 1px solid var(--line); }
 .gp-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
@@ -796,3 +783,16 @@ button.lrow:active { background: var(--surface-3); }
 .tabbar { padding-top: 4px; padding-bottom: calc(var(--safe-bottom) + 3px); }
 .tabbar > button { gap: 1px; padding: 2px 0; font-size: 10.5px; }
 .tabbar > button svg { width: 20px; height: 20px; }
+
+/* Help and hurt are judged from your side: green helps you, red hurts you, whichever team the player is on */
+.hit.fx-help { background: color-mix(in srgb, var(--mint) 12%, transparent); }
+.hit.fx-hurt { background: color-mix(in srgb, var(--coral) 12%, transparent); }
+.hit.fx-none { background: var(--surface-2); }
+.hit .hit-est.help, .hit .hit-fx.help { color: var(--mint); }
+.hit .hit-est.hurt, .hit .hit-fx.hurt { color: var(--coral); }
+
+.gbody { padding: 4px 12px 10px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.gbody .segmented button { min-height: 40px; }
+.gbody .gp { border-top: 0; padding: 0 2px 4px; }
+.lg-chip .lg-pts { margin-left: 4px; font-weight: 800; }
+.hb-updated { font-size: 11.5px; color: var(--faint); padding: 0 0 6px; } .hb-sync { margin: 0 0 8px; }

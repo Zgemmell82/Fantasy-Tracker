@@ -1,6 +1,7 @@
 import { SEASON } from './season.js';
 import { LS_PL, load, save } from './store.js';
 import { defName, normTeam } from './teams.js';
+import { formatOf, sleeperRules } from './scoring.js';
 
 const API = 'https://api.sleeper.app/v1/';
 
@@ -98,11 +99,12 @@ export async function syncSleeper(username, leagueId, week) {
   if (!mine) throw new Error('Your team isn\'t in that Sleeper league.');
   const ms = (await sj('league/' + leagueId + '/matchups/' + week)) || [];
   // Reception scoring decides which of Sleeper's projections (standard, half-PPR, PPR) fits this league.
-  const rec = await sj('league/' + leagueId).then(l => l && l.scoring_settings && l.scoring_settings.rec).catch(() => null);
-  const scoring = typeof rec !== 'number' ? undefined : rec >= 0.9 ? 'ppr' : rec >= 0.4 ? 'half' : 'std';
+  const rules = await sj('league/' + leagueId).then(l => sleeperRules(l && l.scoring_settings)).catch(() => null);
+  const scoring = formatOf(rules);
   const me = ms.find(m => m.roster_id === mine.roster_id);
   if (!me) throw new Error('No week ' + week + ' matchup yet.');
-  const opp = ms.find(m => m.matchup_id === me.matchup_id && m.roster_id !== me.roster_id);
+  // A null matchup_id (a bye in the playoffs) must not pair you with every other idle team.
+  const opp = me.matchup_id == null ? null : ms.find(m => m.matchup_id === me.matchup_id && m.roster_id !== me.roster_id);
   const myIds = realIds(me.starters && me.starters.length ? me.starters : mine.starters);
   const opIds = realIds(opp && opp.starters);
   const players = await resolvePlayers(myIds.concat(opIds));
@@ -111,7 +113,7 @@ export async function syncSleeper(username, leagueId, week) {
   const ids = myIds.concat(opIds);
   players.forEach((p, i) => { if (typeof pts[ids[i]] === 'number') p.pts = pts[ids[i]]; });
   return {
-    mine: players.slice(0, myIds.length), opp: players.slice(myIds.length), ...(scoring ? { scoring } : {}),
+    mine: players.slice(0, myIds.length), opp: players.slice(myIds.length), ...(scoring ? { scoring } : {}), ...(rules ? { rules } : {}),
     score: { mine: me.custom_points ?? me.points ?? null, opp: opp ? (opp.custom_points ?? opp.points ?? null) : null }
   };
 }

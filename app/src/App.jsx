@@ -18,7 +18,8 @@ import { syncEspn } from './lib/espn.js';
 import { syncMfl } from './lib/mfl.js';
 import { syncYahoo, yahooLeagues, startYahooSignIn, yahooStatus, yahooDisconnect, yahooFinish } from './lib/yahoo.js';
 import { takeYahooCode } from './lib/yahoo-return.js';
-import { PlaysScreen, useScoreboard } from './Plays.jsx';
+import { PlaysScreen, RulesContext, useScoreboard } from './Plays.jsx';
+import { leagueRules } from './lib/scoring.js';
 import HotRoute, { useProjections } from './HotRoute.jsx';
 import { MatchCell } from './MatchCell.jsx';
 import LeagueBoard from './Home.jsx';
@@ -213,7 +214,7 @@ function Tracker({ user, onSignOut }) {
       if (!prev.leagues.some(l => l.name === league)) return prev;
       const data = { ...prev.data };
       const wk = { ...(data[week] || seedWeek(week, data, namesOf(prev))) };
-      wk[league] = { mine: lineup.mine.map(mkPlayer), opp: lineup.opp.map(mkPlayer), how, at: Date.now(), ...(lineup.score ? { score: lineup.score } : {}), ...((prev.conn[league] && prev.conn[league].scoring) || lineup.scoring ? { scoring: (prev.conn[league] && prev.conn[league].scoring) || lineup.scoring } : {}) };   // a scoring format chosen under Source beats the detected one
+      wk[league] = { mine: lineup.mine.map(mkPlayer), opp: lineup.opp.map(mkPlayer), how, at: Date.now(), ...(lineup.score ? { score: lineup.score } : {}), ...((prev.conn[league] && prev.conn[league].scoring) || lineup.scoring ? { scoring: (prev.conn[league] && prev.conn[league].scoring) || lineup.scoring } : {}), ...(lineup.rules ? { rules: lineup.rules } : {}) };   // a scoring format chosen under Source beats the detected one
       data[week] = wk;
       return { ...prev, data };
     });
@@ -382,6 +383,7 @@ function Tracker({ user, onSignOut }) {
     return next;
   }), [week]);
   const alertCounts = alertSummary(applyChecks(alerts, acks).open).byLeague;
+  const rulesByLeague = useMemo(() => Object.fromEntries(names.map(n => [n, leagueRules(wk[n], db.conn[n])])), [names.join('|'), wk, db.conn]);   // eslint-disable-line react-hooks/exhaustive-deps
   const now = Date.now();
   const remain = Object.fromEntries(names.map(n => [n, leagueRemaining(week, wk[n], board, now)]));
 
@@ -399,6 +401,7 @@ function Tracker({ user, onSignOut }) {
 
   return (
     <LeagueColors.Provider value={colorOf}>
+    <RulesContext.Provider value={rulesByLeague}>
     <div className="app">
       <header className="head">
         <div className="head-row">
@@ -415,7 +418,7 @@ function Tracker({ user, onSignOut }) {
 
       <main className="body" key={screen}>
         {screen === 'games'
-          ? <Games week={week} wk={wk} names={shown} leagues={names} sel={sel} onSel={setLgSel} board={board} onMatchup={setMatchupFor} alerts={alerts.filter(a => a.leagues.some(l => shown.includes(l)))} acks={acks} setAck={setAck} injReady={!!inj.lookup} injError={inj.error} />
+          ? <Games week={week} wk={wk} names={shown} leagues={names} sel={sel} onSel={setLgSel} board={board} onMatchup={setMatchupFor} synced={db.synced} alerts={alerts.filter(a => a.leagues.some(l => shown.includes(l)))} acks={acks} setAck={setAck} injReady={!!inj.lookup} injError={inj.error} />
           : screen === 'hot'
           ? <HotRoute week={week} wk={wk} leagues={names} shown={shown} sel={sel} onSel={setLgSel} board={board} helper={db.espnHelper} />
           : screen === 'plays'
@@ -460,6 +463,7 @@ function Tracker({ user, onSignOut }) {
 
       {toast && <div className="toast" role="status" key={toast}>{toast}</div>}
     </div>
+    </RulesContext.Provider>
     </LeagueColors.Provider>
   );
 }
@@ -554,28 +558,14 @@ function LineupCheck({ alerts, acks, setAck, ready, error }) {
 }
 
 
-function Games({ week, wk, names, leagues, sel, onSel, board, alerts, acks, setAck, injReady, injError, onMatchup }) {
-  const { games, bye } = groupByGame(week, wk, undefined, names);
-  // Totals cover the whole week, and count lineup spots: a player started in two leagues fills two spots,
-  // so with full lineups both sides come out equal.
-  const everyGame = games.concat([{ status: 'Check', ...bye }]);
-  const spots = list => list.reduce((n, p) => n + p.leagues.length, 0);
-  const yours = everyGame.reduce((n, g) => n + spots(g.mine), 0);
-  const against = everyGame.reduce((n, g) => n + spots(g.theirs), 0);
-
+function Games({ week, wk, names, leagues, sel, onSel, board, alerts, acks, setAck, injReady, injError, onMatchup, synced }) {
   return (
     <div className="stack">
-      <div className="card summary">
-        <div className="sum-cell"><span className="sum-n">{games.length}</span><span className="sum-l">Games</span></div>
-        <div className="sum-cell"><span className="sum-n mint">{yours}</span><span className="sum-l">Your starters</span></div>
-        <div className="sum-cell"><span className="sum-n coral">{against}</span><span className="sum-l">Against you</span></div>
-      </div>
-
       <LineupCheck alerts={alerts} acks={acks} setAck={setAck} ready={injReady} error={injError} />
 
       <LeagueFilter leagues={leagues} sel={sel} onChange={onSel} />
 
-      <LeagueBoard week={week} wk={wk} names={names} board={board} onMatchup={onMatchup} />
+      <LeagueBoard week={week} wk={wk} names={names} board={board} onMatchup={onMatchup} synced={synced} />
 
       {!names.length && (
         <div className="card empty">

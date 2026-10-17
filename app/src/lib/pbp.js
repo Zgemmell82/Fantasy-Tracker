@@ -2,6 +2,7 @@
 import { SEASON } from './season.js';
 import { SCHEDULE_ALL } from '../data.js';
 import { normTeam } from './teams.js';
+import { DEFAULT_RULES, rulesFor } from './scoring.js';
 
 const SITE = 'https://site.api.espn.com';
 const NFL = '/apis/site/v2/sports/football/nfl/';
@@ -169,27 +170,27 @@ export function nameRe(full) {
 
 const DEF_KEYWORDS = /sack|intercept|fumble recovery \(opponent\)|safety|blocked|return touchdown/i;
 
-// Half-PPR estimate of what this play was worth to one player.
-export function estimate(play, re, role) {
+// Estimate of what this play was worth to one player, in the given league scoring (half-PPR defaults).
+export function estimate(play, re, role, rules = DEFAULT_RULES) {
   const t = play.text;
   if (/no play/i.test(t) && /penalty/i.test(t)) return 0;
   const yards = play.yards != null ? play.yards : (() => { const m = t.match(/for (-?\d+) yards?/); return m ? Number(m[1]) : /for no gain/.test(t) ? 0 : 0; })();
   const td = /TOUCHDOWN/i.test(t) && (!play.scoredBy || play.scoredBy === play.offense);
   let pts = 0;
   if (role === 'passer') {
-    if (/INTERCEPTED/i.test(t)) pts -= 2;
-    else if (!/incomplete|sacked|spiked/i.test(t)) pts += yards * 0.04 + (td ? 4 : 0);
+    if (/INTERCEPTED/i.test(t)) pts += rules.passInt;
+    else if (!/incomplete|sacked|spiked/i.test(t)) pts += yards * rules.passYd + (td ? rules.passTd : 0);
   } else if (role === 'receiver') {
-    if (!/incomplete|INTERCEPTED/i.test(t)) pts += 0.5 + yards * 0.1 + (td ? 6 : 0);
+    if (!/incomplete|INTERCEPTED/i.test(t)) pts += rules.rec + yards * rules.recYd + (td ? rules.recTd : 0);
   } else if (role === 'rusher') {
-    pts += yards * 0.1 + (td ? 6 : 0);
+    pts += yards * rules.rushYd + (td ? rules.rushTd : 0);
   } else if (role === 'kicker') {
     const fg = t.match(new RegExp(re + '\\s+(\\d+)\\s+yard field goal is (GOOD|No Good|BLOCKED)', 'i'));
     if (fg) pts += fg[2].toUpperCase() === 'GOOD' ? (Number(fg[1]) >= 50 ? 5 : Number(fg[1]) >= 40 ? 4 : 3) : -1;
   }
   if (role !== 'kicker' && new RegExp(re + '\\s+FUMBLES').test(t)) {
     const rec = t.match(/RECOVERED by ([A-Z]{2,3})/);
-    if (rec && normTeam(rec[1]) !== play.offense) pts -= 2;
+    if (rec && normTeam(rec[1]) !== play.offense) pts += rules.fumLost;
   }
   // The kicker's extra point rides along in touchdown text.
   const xp = t.match(new RegExp(re + '\\s+extra point is (GOOD|No Good|Blocked)', 'i'));
@@ -219,7 +220,9 @@ function defPoints(play, team) {
 }
 
 // tracked: [{ uid, name, pos, team, side: 'mine'|'opp', leagues }] for this game.
-export function matchPlays(plays, tracked) {
+// rulesByLeague: optional { leagueName: rules }. A player in several leagues is scored under each league's rules:
+// hit.byLeague has each league's number, and hit.est is the shared number (or the average when leagues differ).
+export function matchPlays(plays, tracked, rulesByLeague = {}) {
   const people = tracked.filter(p => p.pos !== 'DEF').map(p => ({ ...p, re: nameRe(p.name) })).filter(p => p.re);
   const defs = tracked.filter(p => p.pos === 'DEF');
   return plays.map(play => {
@@ -227,7 +230,11 @@ export function matchPlays(plays, tracked) {
     people.forEach(p => {
       if (!new RegExp(p.re).test(play.text)) return;
       const role = roleOf(play.text, p.re);
-      hits.push({ ...p, role, est: estimate(play, p.re, role) });
+      const byLeague = {};
+      (p.leagues && p.leagues.length ? p.leagues : ['']).forEach(l => { byLeague[l] = estimate(play, p.re, role, rulesFor(rulesByLeague[l], p.pos)); });
+      const vals = Object.values(byLeague);
+      const mixed = vals.some(v => v !== vals[0]);
+      hits.push({ ...p, role, byLeague, mixed, est: mixed ? Math.round(vals.reduce((n, v) => n + v, 0) / vals.length * 10) / 10 : vals[0] });
     });
     defs.forEach(p => {
       if (!DEF_KEYWORDS.test(play.text + ' ' + play.type) && !(play.scoring && play.scoredBy === p.team)) return;

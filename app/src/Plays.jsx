@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { boardFor, fetchPlays, fetchScoreboard, matchPlays, nextPollMs } from './lib/pbp.js';
 import { fmtPts } from './lib/games.js';
 import { buildRecap } from './lib/recap.js';
 import { effectOf, relevantPlay } from './lib/relevance.js';
 import { Avatar, Icon, LeagueFilter, Segmented, TeamLogo, useLeagueColor } from './ui.jsx';
+
+// Each league's own scoring rules ({ leagueName: rules }), so point swings match the league's totals.
+export const RulesContext = createContext({});
 
 const visible = () => document.visibilityState === 'visible';
 
@@ -109,12 +112,12 @@ function PlayCard({ p, isNew, scored, score, game }) {
                   <span className="hit-name">{short(h.name)}</span>
                   {h.injury && <b className="hit-est injury">Injury</b>}
                   {h.est !== 0 && <b className={'hit-est ' + fx + (h.est < 0 ? ' neg' : '')}>{h.est > 0 ? '+' : ''}{fmtPts(h.est)}</b>}
-                  <em className={'hit-fx ' + fx}>{fx === 'help' ? 'Helps you' : 'Hurts you'}</em>
+                  {fx !== 'none' && <em className={'hit-fx ' + fx}>{fx === 'help' ? '▲ Helps you' : '▼ Hurts you'}</em>}
                 </div>
                 <div className="hit-lgs">
                   {h.leagues.map(l => (
                     <span key={l} className={'lg-chip ' + h.side} style={{ '--lc': colorOf(l) }}>
-                      <i />{l}<em>{h.side === 'mine' ? 'FOR you' : 'AGAINST you'}</em>
+                      <i />{l}<em>{h.side === 'mine' ? 'FOR you' : 'AGAINST you'}</em>{h.mixed && h.byLeague && h.byLeague[l] != null && <b className="lg-pts">{h.byLeague[l] > 0 ? '+' : ''}{fmtPts(h.byLeague[l])}</b>}
                     </span>
                   ))}
                 </div>
@@ -128,30 +131,27 @@ function PlayCard({ p, isNew, scored, score, game }) {
   );
 }
 
-export function Feed({ game, info, helper, scored, leagues = [] }) {
+// mode: 'plays' (the play-by-play) or 'recap' (points per quarter, per league). Both load the game's plays.
+export function Feed({ game, info, helper, scored, leagues = [], mode = 'plays' }) {
   const [filter, setFilter] = useState('players');
-  const [view, setView] = useState('recap');           // finished games open on the recap
   const live = info && info.state === 'in';
   const feed = useFeed(info && info.state !== 'pre' ? info.id : null, live, helper);
   const tracked = useMemo(() => trackedFor(game), [game]);
-  const matched = useMemo(() => feed.plays ? matchPlays(feed.plays, tracked) : null, [feed.plays, tracked]);   // oldest first
+  const rules = useContext(RulesContext);
+  const matched = useMemo(() => feed.plays ? matchPlays(feed.plays, tracked, rules) : null, [feed.plays, tracked, rules]);   // oldest first
   const plays = useMemo(() => matched ? [...matched].reverse() : null, [matched]);   // newest first
 
   if (!info) return <div className="feed"><div className="feed-empty">Looking up this game on ESPN…</div></div>;
-  if (info.state === 'pre') return <div className="feed"><div className="feed-empty"><Icon.clock size={18} />Play-by-play starts at kickoff · {game.time}</div></div>;
+  if (info.state === 'pre') return <div className="feed"><div className="feed-empty"><Icon.clock size={18} />{mode === 'recap' ? 'The recap fills in once the game starts' : 'Play-by-play starts at kickoff'} · {game.time}</div></div>;
 
   const shown = !plays ? [] : plays.filter(p => filter === 'all' || (filter === 'players' ? p.hits.length : p.scoring));
   let lastQ = null;
   const final = info.state === 'post';
   const scoreOf = feed.away ? { away: feed.away, home: feed.home } : null;
-  const switcher = final && (
-    <Segmented value={view} onChange={setView} options={[['recap', 'Recap'], ['plays', 'Play-by-play']]} />
-  );
 
-  if (final && view === 'recap') {
+  if (mode === 'recap') {
     return (
       <div className="feed">
-        {switcher}
         {feed.error && <div className="banner err"><Icon.alert size={16} sw={2.5} /><span>{feed.error}</span></div>}
         {!matched && !feed.error && <div className="feed-empty">Loading the game…</div>}
         {matched && <Recap matched={matched} leagues={leagues} score={scoreOf} scored={scored} />}
@@ -161,7 +161,6 @@ export function Feed({ game, info, helper, scored, leagues = [] }) {
 
   return (
     <div className="feed">
-      {switcher}
       <div className="feed-bar">
         <Segmented value={filter} onChange={setFilter} options={[['all', 'All'], ['players', 'Players'], ['scoring', 'Scoring']]} />
         <div className="feed-meta">
@@ -181,7 +180,7 @@ export function Feed({ game, info, helper, scored, leagues = [] }) {
         lastQ = p.period;
         return [header, <PlayCard key={p.id} p={p} isNew={feed.isNew(p.id)} scored={scored} score={scoreOf} />];
       })}
-      {plays && <div className="feed-foot">Point swings are half-PPR estimates; your leagues' real totals come from Sleeper and ESPN.</div>}
+      {plays && <div className="feed-foot">Point swings are estimates using each league's own scoring where known; your leagues' real totals come from Sleeper and ESPN.</div>}
     </div>
   );
 }
@@ -227,7 +226,7 @@ function Recap({ matched, leagues, score, scored }) {
           })}
         </section>
       ))}
-      <div className="feed-foot">Points are estimated from the play-by-play (half-PPR), so they can differ from your leagues' official scoring.</div>
+      <div className="feed-foot">Points are estimated from the play-by-play using each league's own scoring where known, so they can still differ slightly from the official totals.</div>
     </>
   );
 }
@@ -301,6 +300,7 @@ function AllLive({ games, board, helper, scored }) {
   const list = scope === 'live' ? liveList : started;
   const feeds = useGameFeeds(list, helper, list.length > 0);
   const startedAt = useRef(Date.now());
+  const rules = useContext(RulesContext);
 
   // Every play that involves any tracked player, narrowed by the chosen leagues and side.
   const items = useMemo(() => {
@@ -308,7 +308,7 @@ function AllLive({ games, board, helper, scored }) {
     list.forEach(({ g, info }) => {
       const f = feeds.byId[info.id];
       if (!f) return;
-      matchPlays(f.plays, trackedFor(g)).forEach(m => {
+      matchPlays(f.plays, trackedFor(g), rules).forEach(m => {
         const p = relevantPlay(m);                    // only plays that gain or lose points for your players, or hurt one
         if (!p) return;
         const hits = p.hits.filter(h => (impact !== 'mine' || h.side === 'mine') && (impact !== 'opp' || h.side === 'opp'));
@@ -318,7 +318,7 @@ function AllLive({ games, board, helper, scored }) {
     });
     return out.sort((a, b) => (b.seen - a.seen) || (b.p.period - a.p.period) || (clockSecs(a.p.clock) - clockSecs(b.p.clock)) || (b.p.seq - a.p.seq));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feeds.byId, impact, scope, board]);
+  }, [feeds.byId, impact, scope, board, rules]);
 
   return (
     <div className="stack">
@@ -350,8 +350,20 @@ function AllLive({ games, board, helper, scored }) {
           <PlayCard key={gid + ':' + p.id} p={p} game={game} scored={scored} isNew={seen > startedAt.current} score={game} />
         ))}
         {items.length > limit && <button className="pill-btn wide" onClick={() => setLimit(l => l + SHOW_STEP)}>Show {Math.min(SHOW_STEP, items.length - limit)} more</button>}
-        {feeds.loaded && list.length > 0 && <div className="feed-foot">Only plays that gain or lose fantasy points for a player you have or are facing, or injure one of them. Green helps you, red hurts you. Point swings are half-PPR estimates; your leagues' real totals come from their sites.</div>}
+        {feeds.loaded && list.length > 0 && <div className="feed-foot">Only plays that gain or lose fantasy points for a player you have or are facing, or injure one of them. Green helps you, red hurts you. Point swings are estimates using each league's own scoring where known; your leagues' real totals come from their sites.</div>}
       </div>
+    </div>
+  );
+}
+
+// An open game: Players, Play-by-Play or Recap, one at a time. Each game keeps its own choice, and only the chosen
+// section is drawn (and only Play-by-Play and Recap fetch the plays).
+function GameBody({ game, info, helper, scored, leagues }) {
+  const [tab, setTab] = useState('players');
+  return (
+    <div className="gbody">
+      <Segmented value={tab} onChange={setTab} options={[['players', 'Players'], ['plays', 'Play-by-Play'], ['recap', 'Recap']]} />
+      {tab === 'players' ? <GamePlayers game={game} /> : <Feed game={game} info={info} helper={helper} scored={scored} leagues={leagues} mode={tab} />}
     </div>
   );
 }
@@ -425,8 +437,7 @@ export function PlaysScreen({ games, board, boardError, helper, scored, leagues,
                 </span>
               </div>
             </button>
-            {isOpen && <GamePlayers game={g} />}
-            {isOpen && <Feed game={g} info={info} helper={helper} scored={scored} leagues={leagues} />}
+            {isOpen && <GameBody game={g} info={info} helper={helper} scored={scored} leagues={leagues} />}
           </section>
         );
       })}

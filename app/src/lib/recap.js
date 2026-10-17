@@ -1,6 +1,7 @@
 // Post-game recap: for each league, the fantasy points your players scored for you and your opponent's
 // players scored against you in each quarter, with the plays behind them in the order they happened.
-// Points are the play-by-play estimates (half-PPR), not each league's own scoring.
+// Points are the play-by-play estimates, worked out with each league's own scoring rules where we have them
+// (otherwise half-PPR defaults), so they can still differ slightly from the league's official totals.
 
 const round1 = n => Math.round(n * 10) / 10;
 
@@ -17,7 +18,7 @@ export function buildRecap(plays, order = []) {
       if (!quarters.has(p.period)) quarters.set(p.period, { period: p.period, forPts: 0, againstPts: 0, plays: [] });
       const q = quarters.get(p.period);
       // Only this league's view of the play: its players, and whether each is yours or against you here.
-      const hits = p.hits.filter(h => h.leagues.includes(l)).map(h => ({ ...h, leagues: [l] }));
+      const hits = p.hits.filter(h => h.leagues.includes(l)).map(h => ({ ...h, leagues: [l], est: h.byLeague && h.byLeague[l] != null ? h.byLeague[l] : h.est }));
       hits.forEach(h => { if (h.side === 'mine') q.forPts += h.est; else q.againstPts += h.est; });
       q.plays.push({ ...p, hits });
     });

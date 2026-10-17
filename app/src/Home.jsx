@@ -16,7 +16,7 @@ const ordered = (list, how) => (how === 'espn' || how === 'mfl' || how === 'yaho
 
 // Every league's matchup at a glance: one summary strip, then a collapsible section per league with your starters,
 // their live scores and projected finishes, and your total against your opponent's.
-export default function LeagueBoard({ week, wk, names, board, onMatchup }) {
+export default function LeagueBoard({ week, wk, names, board, onMatchup, synced = {} }) {
   const colorOf = useLeagueColor();
   const proj = useProjections(week);
   const [shut, setShut] = useState([]);                        // leagues folded away
@@ -56,6 +56,7 @@ export default function LeagueBoard({ week, wk, names, board, onMatchup }) {
               <span className={'hb-pill ' + g.tone}><i />{g.label}</span>
               <span className={'chev' + (open ? ' open' : '')} aria-hidden="true"><Icon.chevron size={16} sw={2.5} /></span>
             </button>
+            {open && <SyncNote s={synced[name + ':' + week]} at={l && l.at} />}
             {open && (!has ? (
               <p className="hb-empty">No lineup for week {week} yet. Link this league or add starters from the Locker Room tab.</p>
             ) : (
@@ -77,6 +78,16 @@ export default function LeagueBoard({ week, wk, names, board, onMatchup }) {
       )}
     </>
   );
+}
+
+// Says when this league's points were last pulled, and warns loudly if the latest pull failed (the numbers shown are then old).
+function SyncNote({ s, at }) {
+  const failed = s && s.ok === false;
+  const when = at ? new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+  if (!failed && !when) return null;
+  return failed
+    ? <div className="banner err hb-sync"><Icon.alert size={15} sw={2.5} /><span>Couldn't refresh this league{s.err ? ': ' + s.err : ''}.{when ? ' Showing points from ' + when + '.' : ''}</span></div>
+    : <div className="hb-updated">Points updated {when}</div>;
 }
 
 function Starters({ list, how, o, week, board }) {

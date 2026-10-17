@@ -1,5 +1,6 @@
 import { SEASON } from './season.js';
 import { defName } from './teams.js';
+import { espnRules, formatOf } from './scoring.js';
 
 const ESPN_POS = { 1: 'QB', 2: 'RB', 3: 'WR', 4: 'TE', 5: 'K', 16: 'DEF' };
 const ESPN_TEAM = { 1:'ATL',2:'BUF',3:'CHI',4:'CIN',5:'CLE',6:'DAL',7:'DEN',8:'DET',9:'GB',10:'TEN',11:'IND',12:'KC',13:'LV',14:'LA',15:'MIA',16:'MIN',17:'NE',18:'NO',19:'NYG',20:'NYJ',21:'PHI',22:'ARI',23:'PIT',24:'LAC',25:'SF',26:'SEA',27:'TB',28:'WAS',29:'CAR',30:'JAX',33:'BAL',34:'HOU' };
@@ -40,11 +41,23 @@ export function espnUrl(leagueId, week, helper) {
 }
 
 // Reception scoring from the league's settings (stat 53 is receptions) -> the projection format that fits it.
+const scoringItems = j => (((j || {}).settings || {}).scoringSettings || {}).scoringItems;
 export function espnScoring(j) {
-  const items = (((j || {}).settings || {}).scoringSettings || {}).scoringItems;
+  const items = scoringItems(j);
   const rec = Array.isArray(items) ? items.find(i => i.statId === 53) : null;
   if (!rec || typeof rec.points !== 'number') return undefined;
   return rec.points >= 0.9 ? 'ppr' : rec.points >= 0.4 ? 'half' : 'std';
+}
+
+// ESPN numbers matchups by "matchup period", which equals the NFL week in most leagues but not all (playoff rounds
+// can span two weeks). The league's settings say which scoring periods (NFL weeks) each matchup period covers.
+export function espnMatchupPeriod(j, week) {
+  const mp = (((j || {}).settings || {}).scheduleSettings || {}).matchupPeriods;
+  if (mp && typeof mp === 'object') {
+    const hit = Object.keys(mp).find(k => Array.isArray(mp[k]) && mp[k].includes(week));
+    if (hit) return Number(hit);
+  }
+  return week;
 }
 
 export async function syncEspn(leagueId, teamId, week, helper) {
@@ -67,13 +80,15 @@ export async function syncEspn(leagueId, teamId, week, helper) {
     throw e;
   }
   const tid = Number(teamId);
-  const g = (j.schedule || []).find(s => s.matchupPeriodId === week && ((s.home && s.home.teamId === tid) || (s.away && s.away.teamId === tid)));
+  const g = (j.schedule || []).find(s => s.matchupPeriodId === espnMatchupPeriod(j, week) && ((s.home && s.home.teamId === tid) || (s.away && s.away.teamId === tid)));
   if (!g) throw new Error('No week ' + week + ' matchup for team ' + teamId + '.');
   const home = g.home.teamId === tid;
   const meSide = home ? g.home : g.away, opSide = home ? g.away : g.home;
   const res = { mine: espnStarters(meSide, week), opp: espnStarters(opSide, week), score: { mine: sideTotal(meSide), opp: sideTotal(opSide) } };
   const scoring = espnScoring(j);
   if (scoring) res.scoring = scoring;
+  const rules = espnRules(scoringItems(j));
+  if (rules) res.rules = rules;
   if (!res.mine.length) throw new Error('ESPN returned no lineup yet for week ' + week + '.');
   return res;
 }
