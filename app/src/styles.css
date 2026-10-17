@@ -782,3 +782,17 @@ button.lrow:active { background: var(--surface-3); }
 .hb-games-h { font-family: var(--font-display); font-weight: 800; font-size: 17px; margin-top: 6px; display: flex; align-items: baseline; gap: 8px; } .hb-games-h span { font: 500 12px var(--font-body, inherit); color: var(--muted); }
 .hb-srow .ltag { justify-self: start; }
 .wp-toggle { width: 100%; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; padding-left: 0; padding-right: 0; } .wp-toggle .chev { margin-left: auto; font-style: normal; display: inline-grid; } .wp-toggle .chev.open { transform: rotate(180deg); }
+
+/* Compact top and bottom: more room for content on phones */
+.head { padding: calc(var(--safe-top) + 6px) 16px 4px; }
+.eyebrow { font-size: 11px; line-height: 1.2; }
+.title { margin-top: 0; font-size: 24px; line-height: 1.1; }
+.icon-btn { width: 34px; height: 34px; }
+.icon-btn svg { width: 17px; height: 17px; }
+.weeks { margin-top: 6px; padding-top: 0; padding-bottom: 2px; gap: 5px; }
+.wpill { min-width: 32px; height: 32px; padding: 0 8px; font-size: 14px; }
+.wpill.now::after { bottom: 3px; }
+.body { padding-top: 4px; padding-bottom: calc(var(--safe-bottom) + 66px); }
+.tabbar { padding-top: 4px; padding-bottom: calc(var(--safe-bottom) + 3px); }
+.tabbar > button { gap: 1px; padding: 2px 0; font-size: 10.5px; }
+.tabbar > button svg { width: 20px; height: 20px; }
