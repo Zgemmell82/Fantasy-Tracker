@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fractionLeft, hotRoute, leagueOutlook, phi } from './hotroute.js';
+import { boomOf, fractionLeft, hotRoute, leagueOutlook, overBy, phi } from './hotroute.js';
 
 // Week 5: Sunday games are over by Monday morning; Monday night is BUF @ LA.
 const MON = Date.parse('2026-10-12T14:00:00Z');
@@ -85,4 +85,25 @@ test('projections use the league scoring', () => {
   const mk = scoring => leagueOutlook(5, { mine: [star], opp: [], score: { mine: 0, opp: 0 }, scoring }, {}, MON, lookup).exp;
   assert.ok(mk('ppr') > mk('half') && mk('half') > mk('std'));
   assert.ok(Math.abs(mk(undefined) - mk('half')) < 1e-9);                        // no scoring recorded: half-PPR
+});
+
+test('boom: at least 120% of the projection and 5 points over it', () => {
+  assert.equal(boomOf(25, 19.8), true);       // +26% and +5.2
+  assert.equal(boomOf(24, 19.8), false);      // +21% but only +4.2
+  assert.equal(boomOf(5, 3), false);          // +67% but only +2: low projections don't count
+  assert.equal(boomOf(30, null), false);      // no projection, no boom
+  assert.ok(Math.abs(overBy(22, 20) - 0.1) < 1e-9);
+  assert.equal(overBy(null, 20), null);
+});
+
+test('each line carries the live score, the projection in that league\'s scoring, and the boom flag', () => {
+  const lookup = { byId: {}, byTeam: {}, byName: { 'star wideout|LA': [8, 10, 12] } };
+  const lg = scoring => ({ mine: [{ ...star, pts: 18 }], opp: [], score: { mine: 18, opp: 40 }, scoring });
+  const live = { 'BUF@LA': { state: 'in', period: 3, clock: 900 } };      // his game is under way
+  const hr = hotRoute(5, { Half: lg('half'), Ppr: lg('ppr') }, ['Half', 'Ppr'], live, MON, lookup);
+  const row = hr.boom[0];
+  const [half, ppr] = row.lines;
+  assert.deepEqual([half.proj, half.boom], [10, true]);       // 18 vs 10: +80%
+  assert.deepEqual([ppr.proj, ppr.boom], [12, true]);         // 18 vs 12: +50%, +6
+  assert.ok(Math.abs(half.over - 0.8) < 1e-9);
 });

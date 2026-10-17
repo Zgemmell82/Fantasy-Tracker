@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { hotRoute } from './lib/hotroute.js';
+import { BOOM_MIN_GAIN, BOOM_RATIO, hotRoute } from './lib/hotroute.js';
+import { showWinPath, winPaths } from './lib/winpath.js';
 import { loadProjections } from './lib/projections.js';
 import { gameState } from './lib/remaining.js';
-import { Avatar, Icon, LeagueFilter, PosChip, Sheet, useLeagueColor } from './ui.jsx';
+import { Avatar, Icon, LeagueFilter, PosChip, Segmented, Sheet, useLeagueColor } from './ui.jsx';
 import Radio from './Radio.jsx';
 import { RADIO_ENABLED } from './lib/features.js';
 import { fmtPts } from './lib/games.js';
@@ -93,6 +94,8 @@ function when(r, board, week) {
 // One player: how much a big game from him is worth across your leagues, and why.
 function Row({ r, tone, board, week }) {
   const colorOf = useLeagueColor();
+  const booms = r.lines.filter(l => l.boom).map(l => l.over);
+  const best = booms.length ? Math.max(...booms) : null;
   const side = tone === 'for' ? 'mine' : tone === 'against' ? 'opp' : undefined;
   const live = when(r, board, week) === 'Live';
   return (
@@ -101,16 +104,21 @@ function Row({ r, tone, board, week }) {
       <div className="hr-main">
         <div className="hr-name">{r.player.name}</div>
         <div className="hr-meta"><PosChip pos={r.player.pos} /><span>{r.player.team}</span>
-          {live ? <em className="live"><i />Live</em> : <em>{when(r, board, week)}</em>}</div>
+          {live ? <em className="live"><i />Live</em> : <em>{when(r, board, week)}</em>}
+          {best != null && <span className="boom-badge" title={boomHelp}>BOOM<em>{sgn(Math.round(best * 100))} over projection</em></span>}</div>
         <div className="hr-lines">
           {r.lines.map(l => {
             const p = pct(l.swing);
+            const o = l.over == null ? null : Math.round(l.over * 100);
+            // Green when it's good for you: a player of yours over his projection, or one you're facing under it.
+            const good = o == null || o === 0 ? '' : ((o > 0) === (l.side === 'mine') ? 'up' : 'down');
             return (
-              <div key={l.league + l.side} className="hr-line">
+              <div key={l.league + l.side} className={'hr-line' + (l.boom ? ' boom' : '')}>
                 <span className="hr-lname" style={{ '--lc': colorOf(l.league) }}><i />{l.league}</span>
-                <span className={'hr-role ' + l.side}>{l.side === 'mine' ? 'Yours' : 'Theirs'}</span>
-                <span className="hr-sit">{l.done ? 'final' : situation(l.diff)}</span>
-                <b className={'hr-val ' + (p > 0 ? 'up' : p < 0 ? 'down' : 'none')}>{p === 0 ? 'no effect' : sgn(p)}</b>
+                <span className={'hr-role ' + l.side}>{l.side === 'mine' ? 'Yours' : 'Against'}</span>
+                <b className={'hr-over ' + (good || 'none')}>{o == null ? '—' : sgn(o)}</b>
+                <span className="hr-pts">{l.pts == null || !l.started ? '—' : fmtPts(l.pts)}<i> (proj: {l.proj == null ? '—' : fmtPts(Math.round(l.proj * 10) / 10)})</i></span>
+                <span className="hr-sit">{l.done ? 'final' : situation(l.diff) + (p === 0 ? '' : ' · ' + sgn(p) + ' win chance if he booms')}</span>
               </div>
             );
           })}
@@ -124,11 +132,14 @@ function Row({ r, tone, board, week }) {
 }
 
 const TOP = 8;
+const boomHelp = 'Boom: live score is at least ' + Math.round(BOOM_RATIO * 100) + '% of his original projection in that league\'s scoring, and at least ' + BOOM_MIN_GAIN + ' points over it.';
+const bestOver = r => Math.max(...r.lines.map(l => l.over ?? -9));
 
-function Section({ title, sub, tone, rows, board, week }) {
+function Section({ title, sub, tone, rows, board, week, sort }) {
   const [all, setAll] = useState(false);
   if (!rows.length) return null;
-  const list = all ? rows : rows.slice(0, TOP);
+  const sorted = sort === 'over' ? [...rows].sort((a, b) => bestOver(b) - bestOver(a)) : rows;
+  const list = all ? sorted : sorted.slice(0, TOP);
   return (
     <section className="hr-sec">
       <div className={'hr-sec-h ' + tone}><i />{title}<span>{sub}</span></div>
@@ -166,6 +177,8 @@ export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, 
     });
   }, [hr, week]);
   const allDone = hr.leagues.length > 0 && hr.leagues.every(o => o.done);
+  const [view, setView] = useState('all');          // all | boom
+  const [sort, setSort] = useState('swing');         // swing | over
 
   return (
     <div className="stack">
@@ -176,7 +189,7 @@ export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, 
       {!leagues.length && (
         <div className="card empty">
           <Icon.route size={28} />
-          <div className="empty-t">Add a league to run your Hot Route</div>
+          <div className="empty-t">Add a league to run your Two-Minute Drill</div>
           <div className="empty-d">Once your leagues have lineups, this shows who to root for and against.</div>
         </div>
       )}
@@ -188,14 +201,33 @@ export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, 
         </section>
       )}
 
-      {(hr.rootFor.length > 0 || hr.rootAgainst.length > 0 || hr.wash.length > 0) && (
-        <button className="hr-help" onClick={() => setHelp(true)}><Icon.alert size={15} sw={2.5} />How to read these numbers</button>
-      )}
-      <Section tone="for" title="Root for" sub="a big game helps your win chance" rows={hr.rootFor} board={board} week={week} />
-      <Section tone="against" title="Root against" sub="a big game hurts your win chance" rows={hr.rootAgainst} board={board} week={week} />
-      <Section tone="wash" title="Cancels out" sub="helps you in one league, hurts in another" rows={hr.wash} board={board} week={week} />
+      {hr.leagues.length > 0 && showWinPath(week, board) && <WinPath outlooks={hr.leagues} />}
 
-      {hr.leagues.length > 0 && !hr.rootFor.length && !hr.rootAgainst.length && !hr.wash.length && (
+      {(hr.rootFor.length > 0 || hr.rootAgainst.length > 0 || hr.wash.length > 0 || hr.boom.length > 0) && (
+        <>
+          <div className="hr-ctl">
+            <Segmented value={view} onChange={setView} options={[['all', 'All players'], ['boom', 'BOOM' + (hr.boom.length ? ' · ' + hr.boom.length : '')]]} />
+            <Segmented value={sort} onChange={setSort} options={[['swing', 'Sort: win swing'], ['over', 'Sort: % over proj']]} />
+          </div>
+          <div className="hr-legend"><span className="boom-badge">BOOM</span><span>{boomHelp} Worked out separately for each league.</span></div>
+          <button className="hr-help" onClick={() => setHelp(true)}><Icon.alert size={15} sw={2.5} />How to read these numbers</button>
+        </>
+      )}
+      <Section tone="boom" title="Booming" sub="well over projection in at least one league" rows={hr.boom} board={board} week={week} sort="over" />
+      {view === 'all' && <>
+        <Section tone="for" title="Root for" sub="a big game helps your win chance" rows={hr.rootFor} board={board} week={week} sort={sort} />
+        <Section tone="against" title="Root against" sub="a big game hurts your win chance" rows={hr.rootAgainst} board={board} week={week} sort={sort} />
+        <Section tone="wash" title="Cancels out" sub="helps you in one league, hurts in another" rows={hr.wash} board={board} week={week} sort={sort} />
+      </>}
+      {view === 'boom' && !hr.boom.length && hr.leagues.length > 0 && (
+        <div className="card empty">
+          <Icon.route size={28} />
+          <div className="empty-t">Nobody is booming yet</div>
+          <div className="empty-d">A player shows up here once he's at least 20% and {BOOM_MIN_GAIN} points over his projection in a league.</div>
+        </div>
+      )}
+
+      {view === 'all' && hr.leagues.length > 0 && !hr.rootFor.length && !hr.rootAgainst.length && !hr.wash.length && !hr.boom.length && (
         <div className="card empty">
           <Icon.route size={28} />
           <div className="empty-t">{allDone ? 'Week ' + week + ' is in the books' : 'Nothing swings your week right now'}</div>
@@ -218,9 +250,50 @@ export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, 
   );
 }
 
+// What each league needs to finish in front: the gap, who can close it, and how likely it is.
+const STATUS = { win: 'Win', bubble: 'On the bubble', miracle: 'Need a miracle' };
+function WinPath({ outlooks }) {
+  const colorOf = useLeagueColor();
+  const [how, setHow] = useState(false);
+  const paths = useMemo(() => winPaths(outlooks), [outlooks]);
+  if (!paths.length) return null;
+  const live = paths.filter(w => !w.locked), locked = paths.filter(w => w.locked);
+  return (
+    <section className="hr-sec">
+      <div className="hr-sec-h"><i />What I need to win<span>late games and primetime</span></div>
+      <div className="card wp">
+        {live.map(w => (
+          <div className="wp-row" key={w.name}>
+            <div className="wp-head">
+              <span className="ltag" style={{ '--lc': colorOf(w.name) }}>{w.name}</span>
+              <span className={'wp-status ' + w.status}>{STATUS[w.status]} · {Math.round(w.wp * 100)}%</span>
+            </div>
+            <div className="wp-scores"><span className="mint"><em>You</em><b>{fmtPts(w.me)}</b></span><span className="wp-need">{w.need > 0 ? 'need ' + fmtPts(w.need) + ' more' : 'ahead of their finish'}</span><span className="coral"><b>{fmtPts(w.them)}</b><em>Them</em></span></div>
+            <p className="wp-line">{w.line}</p>
+            <div className="wp-foot">{w.mineLeft} of yours left (proj {fmtPts(w.mineRem)}) · {w.oppLeft} of theirs left (proj {fmtPts(w.oppRem)}){w.oppPlayers.length ? ': ' + w.oppPlayers.map(p => p.name.split(' ').slice(-1)[0]).join(', ') : ''}</div>
+          </div>
+        ))}
+        {locked.map(w => (
+          <div className="wp-row locked" key={w.name}>
+            <div className="wp-head">
+              <span className="ltag" style={{ '--lc': colorOf(w.name) }}>{w.name}</span>
+              <span className={'wp-status ' + (w.lockedWin ? 'win' : 'miracle')}>{w.lockedWin ? 'Locked win' : 'Locked loss'}</span>
+            </div>
+            <div className="wp-foot">{fmtPts(w.me)} to {fmtPts(w.them)}. {w.line}</div>
+          </div>
+        ))}
+        <button className="hr-tl-btn" onClick={() => setHow(v => !v)} aria-expanded={how}>{how ? 'Hide' : 'How is this worked out?'}</button>
+        {how && (
+          <p className="hint">Needed points = their score + what their unfinished players are projected to add − your score. Your best remaining players are added up (by what's left of their Sleeper projection, scaled by the clock) until they cover it. Win chance compares both sides' expected finishes against how much the remaining games can swing it. Win is 70% or better, a miracle is 15% or less, and a league is locked at 99% or once everyone has played.</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function HowTo({ onClose }) {
   return (
-    <Sheet title="Reading Hot Route" subtitle="What the numbers mean" onClose={onClose}>
+    <Sheet title="Reading the Two-Minute Drill" subtitle="What the numbers mean" onClose={onClose}>
       <div className="howto">
         <div className="ht-block">
           <b>The percentage on each line</b>

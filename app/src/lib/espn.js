@@ -36,7 +36,15 @@ export function espnStarters(side, week) {
 export function espnUrl(leagueId, week, helper) {
   const base = helper ? String(helper).trim().replace(/\/+$/, '') : 'https://lm-api-reads.fantasy.espn.com';
   return base + '/apis/v3/games/ffl/seasons/' + SEASON + '/segments/0/leagues/' + leagueId +
-    '?view=mMatchup&view=mMatchupScore&scoringPeriodId=' + week;
+    '?view=mMatchup&view=mMatchupScore&view=mSettings&scoringPeriodId=' + week;
+}
+
+// Reception scoring from the league's settings (stat 53 is receptions) -> the projection format that fits it.
+export function espnScoring(j) {
+  const items = (((j || {}).settings || {}).scoringSettings || {}).scoringItems;
+  const rec = Array.isArray(items) ? items.find(i => i.statId === 53) : null;
+  if (!rec || typeof rec.points !== 'number') return undefined;
+  return rec.points >= 0.9 ? 'ppr' : rec.points >= 0.4 ? 'half' : 'std';
 }
 
 export async function syncEspn(leagueId, teamId, week, helper) {
@@ -64,6 +72,8 @@ export async function syncEspn(leagueId, teamId, week, helper) {
   const home = g.home.teamId === tid;
   const meSide = home ? g.home : g.away, opSide = home ? g.away : g.home;
   const res = { mine: espnStarters(meSide, week), opp: espnStarters(opSide, week), score: { mine: sideTotal(meSide), opp: sideTotal(opSide) } };
+  const scoring = espnScoring(j);
+  if (scoring) res.scoring = scoring;
   if (!res.mine.length) throw new Error('ESPN returned no lineup yet for week ' + week + '.');
   return res;
 }

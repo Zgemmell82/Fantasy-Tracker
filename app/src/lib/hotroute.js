@@ -23,6 +23,13 @@ const CV = { QB: 0.42, RB: 0.6, WR: 0.62, TE: 0.67, K: 0.45, DEF: 0.65, IDP: 0.8
 const KEY = { QB: 'QB', RB: 'RB', FB: 'RB', WR: 'WR', TE: 'TE', K: 'K', PK: 'K', DEF: 'DEF' };
 const posKey = pos => KEY[String(pos || '').toUpperCase()] || 'IDP';
 
+// A player is "booming" in a league when his live score is at least 120% of his original projection in that
+// league's scoring, and at least 5 points over it (so a 3-point projection that becomes 4 doesn't count).
+export const BOOM_RATIO = 1.2, BOOM_MIN_GAIN = 5;
+export const boomOf = (pts, proj) => typeof pts === 'number' && proj != null && proj > 0 && pts >= proj * BOOM_RATIO && pts - proj >= BOOM_MIN_GAIN;
+// Live score against projection, as a fraction (0.1 = 10% over). null without both numbers.
+export const overBy = (pts, proj) => typeof pts === 'number' && proj != null && proj > 0 ? (pts - proj) / proj : null;
+
 // Win probability swing needed before a player counts as a root-for or root-against.
 export const MIN_SWING = 0.02;
 
@@ -64,7 +71,7 @@ export function leagueOutlook(week, lineup, board, now = Date.now(), lookup = nu
     const proj = projectionFor(lookup, p, l.scoring);
     const full = proj != null ? proj : MEAN[k];                              // his whole-game average
     const spread = proj != null ? Math.max(2, CV[k] * proj) : SD[k];
-    return { p, who, f, mean: full * f, sd: spread * Math.sqrt(f), projected: proj != null, game: g || null };
+    return { p, who, f, mean: full * f, sd: spread * Math.sqrt(f), projected: proj != null, proj, game: g || null };
   });
   const mine = side(l.mine, 'mine'), opp = side(l.opp, 'opp');
   const known = l.score && (l.score.mine != null || l.score.opp != null);
@@ -97,14 +104,14 @@ export function hotRoute(week, wk, leagues, board, now = Date.now(), lookup = nu
   const outlooks = leagues.map(name => ({ name, ...leagueOutlook(week, wk[name], board, now, lookup) }));
   const byPlayer = new Map();
   outlooks.forEach(o => [...o.mine, ...o.opp].forEach(x => {
-    if (x.f <= 0) return;                                  // already played: nothing left to root for
     const key = normTeam(x.p.team) + '|' + String(x.p.name).toLowerCase();
     if (!byPlayer.has(key)) byPlayer.set(key, { key, player: x.p, f: x.f, game: x.game, net: 0, lines: [] });
     const r = byPlayer.get(key);
     r.projected = r.projected || x.projected;
     const swing = boom(o, x);
     r.net += swing;
-    r.lines.push({ league: o.name, side: x.who, swing, diff: o.diff, wp: o.wp, done: o.done });
+    const pts = typeof x.p.pts === 'number' ? x.p.pts : null;
+    r.lines.push({ league: o.name, side: x.who, swing, diff: o.diff, wp: o.wp, done: o.done, pts, proj: x.proj, started: x.f < 1, over: x.f < 1 ? overBy(pts, x.proj) : null, boom: boomOf(pts, x.proj) });
   }));
   const rows = [...byPlayer.values()].map(r => ({
     ...r,
@@ -114,5 +121,6 @@ export function hotRoute(week, wk, leagues, board, now = Date.now(), lookup = nu
   const rootAgainst = rows.filter(r => r.net <= -MIN_SWING).sort((a, b) => a.net - b.net);
   const wash = rows.filter(r => Math.abs(r.net) < MIN_SWING && r.both
     && r.lines.some(l => Math.abs(l.swing) >= MIN_SWING)).sort((a, b) => a.player.name.localeCompare(b.player.name));
-  return { leagues: outlooks, rootFor, rootAgainst, wash, playersLeft: outlooks.reduce((n, o) => n + o.leftMine + o.leftOpp, 0), projectedLeft: outlooks.reduce((n, o) => n + o.projectedLeft, 0) };
+  const boomRows = rows.filter(r => r.lines.some(l => l.boom)).sort((a, b) => Math.max(...b.lines.map(l => l.over ?? -1)) - Math.max(...a.lines.map(l => l.over ?? -1)));
+  return { leagues: outlooks, rootFor, rootAgainst, wash, boom: boomRows, playersLeft: outlooks.reduce((n, o) => n + o.leftMine + o.leftOpp, 0), projectedLeft: outlooks.reduce((n, o) => n + o.projectedLeft, 0) };
 }

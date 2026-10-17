@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { boardFor, fetchPlays, fetchScoreboard, matchPlays, nextPollMs } from './lib/pbp.js';
 import { fmtPts } from './lib/games.js';
 import { buildRecap } from './lib/recap.js';
+import { effectOf, relevantPlay } from './lib/relevance.js';
 import { Avatar, Icon, LeagueFilter, Segmented, TeamLogo, useLeagueColor } from './ui.jsx';
 
 const visible = () => document.visibilityState === 'visible';
@@ -101,12 +102,14 @@ function PlayCard({ p, isNew, scored, score, game }) {
         <div className="play-text">{p.text}</div>
         {p.hits.length > 0 && (
           <div className="hits">
-            {p.hits.map(h => (
-              <div key={h.uid} className={'hit ' + h.side + (scored && scored[h.uid] ? ' done' : '')}>
+            {p.hits.map(h => { const fx = h.effect || effectOf(h.side, h.est, false); return (
+              <div key={h.uid} className={'hit ' + h.side + ' fx-' + fx + (scored && scored[h.uid] ? ' done' : '')}>
                 <div className="hit-top">
                   <Avatar p={h} size={22} side={h.side} />
                   <span className="hit-name">{short(h.name)}</span>
-                  {h.est !== 0 && <b className={'hit-est' + (h.est < 0 ? ' neg' : '')}>{h.est > 0 ? '+' : ''}{fmtPts(h.est)}</b>}
+                  {h.injury && <b className="hit-est injury">Injury</b>}
+                  {h.est !== 0 && <b className={'hit-est ' + fx + (h.est < 0 ? ' neg' : '')}>{h.est > 0 ? '+' : ''}{fmtPts(h.est)}</b>}
+                  <em className={'hit-fx ' + fx}>{fx === 'help' ? 'Helps you' : 'Hurts you'}</em>
                 </div>
                 <div className="hit-lgs">
                   {h.leagues.map(l => (
@@ -116,7 +119,7 @@ function PlayCard({ p, isNew, scored, score, game }) {
                   ))}
                 </div>
               </div>
-            ))}
+            ); })}
           </div>
         )}
         {p.scoring && score && <div className="play-score">{score.away} {p.awayScore} – {p.homeScore} {score.home}</div>}
@@ -305,7 +308,9 @@ function AllLive({ games, board, helper, scored }) {
     list.forEach(({ g, info }) => {
       const f = feeds.byId[info.id];
       if (!f) return;
-      matchPlays(f.plays, trackedFor(g)).forEach(p => {
+      matchPlays(f.plays, trackedFor(g)).forEach(m => {
+        const p = relevantPlay(m);                    // only plays that gain or lose points for your players, or hurt one
+        if (!p) return;
         const hits = p.hits.filter(h => (impact !== 'mine' || h.side === 'mine') && (impact !== 'opp' || h.side === 'opp'));
         if (!hits.length || (impact === 'scoring' && !p.scoring)) return;
         out.push({ p: { ...p, hits }, game: { away: f.away || info.away, home: f.home || info.home }, gid: info.id, seen: feeds.seenAt(info.id, p.id) });
@@ -345,8 +350,29 @@ function AllLive({ games, board, helper, scored }) {
           <PlayCard key={gid + ':' + p.id} p={p} game={game} scored={scored} isNew={seen > startedAt.current} score={game} />
         ))}
         {items.length > limit && <button className="pill-btn wide" onClick={() => setLimit(l => l + SHOW_STEP)}>Show {Math.min(SHOW_STEP, items.length - limit)} more</button>}
-        {feeds.loaded && list.length > 0 && <div className="feed-foot">Every play that touches a player in any of your leagues. Point swings are half-PPR estimates; your leagues' real totals come from their sites.</div>}
+        {feeds.loaded && list.length > 0 && <div className="feed-foot">Only plays that gain or lose fantasy points for a player you have or are facing, or injure one of them. Green helps you, red hurts you. Point swings are half-PPR estimates; your leagues' real totals come from their sites.</div>}
       </div>
+    </div>
+  );
+}
+
+// The players in one game who are on your teams or the teams you face: marked For or Against, with their leagues.
+function GamePlayers({ game }) {
+  const colorOf = useLeagueColor();
+  const rows = [...game.mine.map(p => ({ p, side: 'mine' })), ...game.theirs.map(p => ({ p, side: 'opp' }))];
+  if (!rows.length) return null;
+  return (
+    <div className="gp">
+      {rows.map(({ p, side }) => (
+        <div className={'gp-row ' + side} key={side + p.uid}>
+          <Avatar p={p} size={30} side={side} />
+          <div className="gp-main">
+            <span className="gp-name">{p.name}</span>
+            <span className="gp-lgs">{p.leagues.map(l => <span key={l} className="lg-chip" style={{ '--lc': colorOf(l) }}><i />{l}</span>)}</span>
+          </div>
+          <span className={'gp-tag ' + side}>{side === 'mine' ? 'For' : 'Against'}</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -354,8 +380,9 @@ function AllLive({ games, board, helper, scored }) {
 const ORDER = { in: 0, pre: 1, post: 2 };
 
 export function PlaysScreen({ games, board, boardError, helper, scored, leagues, sel, onSel }) {
-  const [open, setOpen] = useState(null);
+  const [open, setOpen] = useState([]);                 // game keys that are expanded
   const [view, setView] = useState('games');
+  const toggle = k => setOpen(o => o.includes(k) ? o.filter(x => x !== k) : [...o, k]);
   const list = games
     .map(g => ({ g, info: boardFor(board, g.key) }))
     .sort((a, b) => (ORDER[a.info ? a.info.state : 'pre'] - ORDER[b.info ? b.info.state : 'pre']));
@@ -365,6 +392,9 @@ export function PlaysScreen({ games, board, boardError, helper, scored, leagues,
   return (
     <div className="stack">
       <Segmented value={view} onChange={setView} options={[['games', 'By game'], ['all', 'All plays' + (nLive ? ' · ' + nLive + ' live' : '')]]} />
+      {view === 'games' && list.length > 1 && (
+        <button className="text-btn pg-all" onClick={() => setOpen(open.length ? [] : list.map(x => x.g.key))}>{open.length ? 'Collapse all games' : 'Expand all games'}</button>
+      )}
       <LeagueFilter leagues={leagues} sel={sel} onChange={onSel} />
       {!list.length && (
         <div className="card empty">
@@ -376,10 +406,10 @@ export function PlaysScreen({ games, board, boardError, helper, scored, leagues,
       {boardError && <div className="banner err"><Icon.alert size={16} sw={2.5} /><span>{boardError} Scores and plays will show once ESPN is reachable.</span></div>}
       {view === 'all' && <AllLive games={games} board={board} helper={helper} scored={scored} leagues={leagues} />}
       {view === 'games' && list.map(({ g, info }) => {
-        const isOpen = open === g.key;
+        const isOpen = open.includes(g.key);
         return (
           <section key={g.key} className={'card pgame' + (isOpen ? ' open' : '')}>
-            <button className="pgame-head" onClick={() => setOpen(isOpen ? null : g.key)} aria-expanded={isOpen}>
+            <button className="pgame-head" onClick={() => toggle(g.key)} aria-expanded={isOpen}>
               <div className="pgame-row">
                 <GameScore game={g} info={info} />
                 <GameStatus game={g} info={info} />
@@ -395,6 +425,7 @@ export function PlaysScreen({ games, board, boardError, helper, scored, leagues,
                 </span>
               </div>
             </button>
+            {isOpen && <GamePlayers game={g} />}
             {isOpen && <Feed game={g} info={info} helper={helper} scored={scored} leagues={leagues} />}
           </section>
         );

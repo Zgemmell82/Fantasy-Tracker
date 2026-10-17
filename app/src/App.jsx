@@ -21,6 +21,8 @@ import { takeYahooCode } from './lib/yahoo-return.js';
 import { Feed, GameStatus, PlaysScreen, useScoreboard } from './Plays.jsx';
 import { boardFor } from './lib/pbp.js';
 import HotRoute, { useProjections } from './HotRoute.jsx';
+import { MatchCell, inRz } from './MatchCell.jsx';
+import LeagueBoard from './Home.jsx';
 import { leagueOutlook } from './lib/hotroute.js';
 import { normTeam } from './lib/teams.js';
 
@@ -212,7 +214,7 @@ function Tracker({ user, onSignOut }) {
       if (!prev.leagues.some(l => l.name === league)) return prev;
       const data = { ...prev.data };
       const wk = { ...(data[week] || seedWeek(week, data, namesOf(prev))) };
-      wk[league] = { mine: lineup.mine.map(mkPlayer), opp: lineup.opp.map(mkPlayer), how, at: Date.now(), ...(lineup.score ? { score: lineup.score } : {}), ...(lineup.scoring ? { scoring: lineup.scoring } : {}) };
+      wk[league] = { mine: lineup.mine.map(mkPlayer), opp: lineup.opp.map(mkPlayer), how, at: Date.now(), ...(lineup.score ? { score: lineup.score } : {}), ...((prev.conn[league] && prev.conn[league].scoring) || lineup.scoring ? { scoring: (prev.conn[league] && prev.conn[league].scoring) || lineup.scoring } : {}) };   // a scoring format chosen under Source beats the detected one
       data[week] = wk;
       return { ...prev, data };
     });
@@ -402,8 +404,8 @@ function Tracker({ user, onSignOut }) {
       <header className="head">
         <div className="head-row">
           <div>
-            <div className="eyebrow">{SEASON} season</div>
-            <h1 className="title">{screen === 'games' ? 'Week ' + week : screen === 'plays' ? 'Plays' : screen === 'hot' ? 'Hot Route' : 'Leagues'}</h1>
+            <div className="eyebrow">{SEASON} season{screen === 'games' ? ' · Week ' + week : ''}</div>
+            <h1 className="title">{screen === 'games' ? 'The Huddle' : screen === 'plays' ? 'Game Film' : screen === 'hot' ? 'Two-Minute Drill' : 'Locker Room'}</h1>
           </div>
           <button className={'icon-btn' + (syncing ? ' spinning' : '')} disabled={syncing} onClick={() => syncAll(false)} aria-label="Sync connected leagues">
             <Icon.refresh size={19} />
@@ -414,7 +416,7 @@ function Tracker({ user, onSignOut }) {
 
       <main className="body" key={screen}>
         {screen === 'games'
-          ? <Games week={week} wk={wk} names={shown} leagues={names} sel={sel} onSel={setLgSel} scored={scoredWeek} filter={filter} setFilter={setFilter} onToggle={toggleScored} board={board} helper={db.espnHelper} alerts={alerts.filter(a => a.leagues.some(l => shown.includes(l)))} acks={acks} setAck={setAck} injReady={!!inj.lookup} injError={inj.error} />
+          ? <Games week={week} wk={wk} names={shown} leagues={names} sel={sel} onSel={setLgSel} scored={scoredWeek} filter={filter} setFilter={setFilter} onToggle={toggleScored} board={board} helper={db.espnHelper} onMatchup={setMatchupFor} alerts={alerts.filter(a => a.leagues.some(l => shown.includes(l)))} acks={acks} setAck={setAck} injReady={!!inj.lookup} injError={inj.error} />
           : screen === 'hot'
           ? <HotRoute week={week} wk={wk} leagues={names} shown={shown} sel={sel} onSel={setLgSel} board={board} helper={db.espnHelper} />
           : screen === 'plays'
@@ -425,10 +427,10 @@ function Tracker({ user, onSignOut }) {
       </main>
 
       <nav className="tabbar">
-        <button className={screen === 'games' ? 'on' : ''} onClick={() => setScreen('games')}><Icon.football size={23} /><span>Games</span></button>
-        <button className={screen === 'plays' ? 'on' : ''} onClick={() => setScreen('plays')}><Icon.activity size={23} /><span>Plays</span></button>
-        <button className={screen === 'hot' ? 'on' : ''} onClick={() => setScreen('hot')}><Icon.route size={23} /><span>Hot Route</span></button>
-        <button className={screen === 'leagues' ? 'on' : ''} onClick={() => setScreen('leagues')}><Icon.trophy size={23} /><span>Leagues</span></button>
+        <button className={screen === 'games' ? 'on' : ''} onClick={() => setScreen('games')}><Icon.football size={23} /><span>The Huddle</span></button>
+        <button className={screen === 'plays' ? 'on' : ''} onClick={() => setScreen('plays')}><Icon.activity size={23} /><span>Game Film</span></button>
+        <button className={screen === 'hot' ? 'on' : ''} onClick={() => setScreen('hot')}><Icon.route size={23} /><span>2-Min Drill</span></button>
+        <button className={screen === 'leagues' ? 'on' : ''} onClick={() => setScreen('leagues')}><Icon.trophy size={23} /><span>Locker Room</span></button>
       </nav>
 
       {editFor && <EditSheet league={editFor} week={week} lineup={wk[editFor] || { mine: [], opp: [] }}
@@ -566,15 +568,13 @@ function LineupCheck({ alerts, acks, setAck, ready, error }) {
   );
 }
 
-// True while a player's team has the ball in the red zone (his team is the one in possession).
-const inRz = (board, g, p) => { const i = !g.bye && boardFor(board, g.key); return !!(i && i.state === 'in' && i.redZone && i.possession && i.possession === normTeam(p.team)); };
 
 function StatusPill({ status }) {
   if (status === 'Live') return <span className="spill live"><i />Live</span>;
   return <span className={'spill' + (status === 'Final' ? ' final' : '')}>{status}</span>;
 }
 
-function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter, onToggle, board, helper, alerts, acks, setAck, injReady, injError }) {
+function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter, onToggle, board, helper, alerts, acks, setAck, injReady, injError, onMatchup }) {
   const flags = Object.fromEntries(alerts.map(a => [a.key, a]));
   const [pbp, setPbp] = useState(null);
   const { games, bye } = groupByGame(week, wk, undefined, names);
@@ -610,8 +610,12 @@ function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter
 
       <LineupCheck alerts={alerts} acks={acks} setAck={setAck} ready={injReady} error={injError} />
 
-      <Segmented value={filter} onChange={setFilter} options={[['all', 'All games'], ['mine', 'My players']]} />
       <LeagueFilter leagues={leagues} sel={sel} onChange={onSel} />
+
+      <LeagueBoard week={week} wk={wk} names={names} board={board} onMatchup={onMatchup} />
+
+      <div className="hb-games-h">Games<span>every NFL game with your players</span></div>
+      <Segmented value={filter} onChange={setFilter} options={[['all', 'All games'], ['mine', 'My players']]} />
 
       {shown.map(g => {
         const [away, home] = g.bye ? [null, null] : g.key.split('@');
@@ -660,7 +664,7 @@ function Games({ week, wk, names, leagues, sel, onSel, scored, filter, setFilter
         : <div className="card empty">
             <Icon.football size={28} />
             <div className="empty-t">No lineups for week {week}</div>
-            <div className="empty-d">Connect a league on the Leagues tab, or add players by hand.</div>
+            <div className="empty-d">Connect a league in the Locker Room tab, or add players by hand.</div>
           </div>}
     </div>
   );
@@ -712,7 +716,7 @@ function Leagues({ week, wk, leagues, remain, alertCounts, onMatchup, theme, onT
             </div>
             <div className={'league-status' + (failed ? ' err' : l.how ? ' ok' : '')}><StatusIcon size={14} sw={2.5} /><span>{status}</span></div>
             <LeftToPlay r={remain[n]} />
-            {alertCounts[n] > 0 && <div className="lc-chip"><Icon.alert size={14} sw={2.5} />{alertCounts[n]} lineup {alertCounts[n] === 1 ? 'alert' : 'alerts'}. See Games.</div>}
+            {alertCounts[n] > 0 && <div className="lc-chip"><Icon.alert size={14} sw={2.5} />{alertCounts[n]} lineup {alertCounts[n] === 1 ? 'alert' : 'alerts'}. See The Huddle.</div>}
             <div className="league-actions">
               {linked && <button className="pill-btn primary" disabled={syncing} onClick={() => onSync(n)}><Icon.refresh size={15} sw={2.5} />Sync</button>}
               <button className={'pill-btn' + (linked ? '' : ' primary')} onClick={() => onEdit(n)}><Icon.pencil size={15} sw={2.5} />Edit</button>
@@ -865,13 +869,19 @@ function ConnectSheet({ league, week, conn, sleeperUser, setSleeperUser, setConn
     <Sheet title={league} subtitle="Where this league's lineups come from" onClose={onClose} label={'Connect ' + league}>
       <Segmented value={c.source} onChange={pickSource} options={[['sleeper', 'Sleeper'], ['espn', 'ESPN'], ['mfl', 'MFL'], ['yahoo', 'Yahoo'], ['ffpc', 'FFPC'], ['manual', 'By hand']]} />
 
+      <div className="field">
+          <label>Scoring (for projections)</label>
+          <Segmented value={c.scoring || 'auto'} onChange={v => setConn({ scoring: v === 'auto' ? '' : v })} options={[['auto', 'Auto'], ['std', 'Standard'], ['half', 'Half PPR'], ['ppr', 'PPR']]} />
+          <p className="sheet-note">Each league's projections use its own scoring. Auto reads it from Sleeper and ESPN; pick one here for other sources (it defaults to half PPR).</p>
+      </div>
+
       {c.source === 'manual' && (
         <p className="sheet-note">You'll update this league each week by editing its players. Nothing is fetched automatically.</p>
       )}
 
       {c.source === 'ffpc' && (
         <>
-          <p className="sheet-note">FFPC doesn't share lineups with outside apps, so this league is tracked by hand: tap <b>Edit</b> on the Leagues tab to add your starters and your opponent's each week. Choosing FFPC labels the league and keeps it from being replaced by a built-in link.</p>
+          <p className="sheet-note">FFPC doesn't share lineups with outside apps, so this league is tracked by hand: tap <b>Edit</b> in the Locker Room tab to add your starters and your opponent's each week. Choosing FFPC labels the league and keeps it from being replaced by a built-in link.</p>
           <div className="field">
             <label htmlFor="ffpc-id">FFPC league number (optional)</label>
             <input id="ffpc-id" className="input" value={c.leagueId || ''} onChange={e => setConn({ leagueId: e.target.value.replace(/\D/g, '') })} inputMode="numeric" placeholder="For your own reference" />
@@ -1046,30 +1056,6 @@ function MatchupSheet({ league, week, lineup, board, onClose }) {
   );
 }
 
-// One starter in the matchup: photo, name, position and team, and either their points or when they play.
-function MatchCell({ p, side, week, board, fin }) {
-  if (!p) return <div className="mu-cell empty" />;
-  const g = gameFor(week, p.team);
-  const state = g ? gameState(g, board) : null;
-  const time = g && state === 'pre' ? ((/^(\w{3})/.exec(g.d) || [])[1] || '') + ' ' + ((/(\d+:\d+) ([AP])M/.exec(g.d) || []).slice(1).join('').toLowerCase()) : '';
-  const has = typeof p.pts === 'number';
-  return (
-    <div className={'mu-cell ' + side}>
-      <Avatar p={p} size={30} side={side} />
-      <div className="mu-main">
-        <span className="mu-name">{p.name}</span>
-        <span className="mu-meta"><PosChip pos={p.pos} /><span>{p.team}</span>
-          {!g ? <em>Bye</em> : state === 'in' ? <em className="live"><i />Live</em> : state === 'pre' ? <em>{time}</em> : <em>Final</em>}
-          {g && inRz(board, { key: g.a + '@' + g.h }, p) && <em className="flag rz">RZ</em>}
-        </span>
-      </div>
-      <span className="mu-right">
-        <b className={'mu-pts' + (has ? '' : ' none')}>{has ? fmtPts(p.pts) : '—'}</b>
-        {fin && fin.left && <span className="mu-proj" title={fin.real ? "Sleeper's projection" : 'Position average'}>proj {fin.total.toFixed(1)}{fin.real ? '' : '~'}</span>}
-      </span>
-    </div>
-  );
-}
 
 const plural = n => n + (n === 1 ? ' player' : ' players');
 
