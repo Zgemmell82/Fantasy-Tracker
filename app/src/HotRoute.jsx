@@ -255,13 +255,17 @@ const STATUS = { win: 'Win', bubble: 'On the bubble', miracle: 'Need a miracle' 
 function WinPath({ outlooks }) {
   const colorOf = useLeagueColor();
   const [how, setHow] = useState(false);
+  const [open, setOpen] = useState(false);                   // folded away until asked for
   const paths = useMemo(() => winPaths(outlooks), [outlooks]);
   if (!paths.length) return null;
   const live = paths.filter(w => !w.locked), locked = paths.filter(w => w.locked);
   return (
     <section className="hr-sec">
-      <div className="hr-sec-h"><i />What I need to win<span>late games and primetime</span></div>
-      <div className="card wp">
+      <button className="hr-sec-h wp-toggle" onClick={() => setOpen(v => !v)} aria-expanded={open}>
+        <i />What I need to win<span>{open ? 'late games and primetime' : paths.filter(w => !w.locked).length + ' undecided · tap to open'}</span>
+        <em className={'chev' + (open ? ' open' : '')} aria-hidden="true"><Icon.chevron size={16} sw={2.5} /></em>
+      </button>
+      {open && <div className="card wp">
         {live.map(w => (
           <div className="wp-row" key={w.name}>
             <div className="wp-head">
@@ -286,7 +290,7 @@ function WinPath({ outlooks }) {
         {how && (
           <p className="hint">Needed points = their score + what their unfinished players are projected to add − your score. Your best remaining players are added up (by what's left of their Sleeper projection, scaled by the clock) until they cover it. Win chance compares both sides' expected finishes against how much the remaining games can swing it. Win is 70% or better, a miracle is 15% or less, and a league is locked at 99% or once everyone has played.</p>
         )}
-      </div>
+      </div>}
     </section>
   );
 }

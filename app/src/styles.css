@@ -781,3 +781,4 @@ button.lrow:active { background: var(--surface-3); }
 .hb-more { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-top: 8px; padding: 10px 12px; border: 0; border-radius: 12px; background: var(--surface-2); color: inherit; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
 .hb-games-h { font-family: var(--font-display); font-weight: 800; font-size: 17px; margin-top: 6px; display: flex; align-items: baseline; gap: 8px; } .hb-games-h span { font: 500 12px var(--font-body, inherit); color: var(--muted); }
 .hb-srow .ltag { justify-self: start; }
+.wp-toggle { width: 100%; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; padding-left: 0; padding-right: 0; } .wp-toggle .chev { margin-left: auto; font-style: normal; display: inline-grid; } .wp-toggle .chev.open { transform: rotate(180deg); }
