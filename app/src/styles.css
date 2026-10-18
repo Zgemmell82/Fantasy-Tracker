@@ -796,3 +796,9 @@ button.lrow:active { background: var(--surface-3); }
 .gbody .gp { border-top: 0; padding: 0 2px 4px; }
 .lg-chip .lg-pts { margin-left: 4px; font-weight: 800; }
 .hb-updated { font-size: 11.5px; color: var(--faint); padding: 0 0 6px; } .hb-sync { margin: 0 0 8px; }
+
+/* All plays: plays that matter to your teams stand out */
+.play.fantasy { background: color-mix(in srgb, var(--mint) 7%, var(--surface)); box-shadow: inset 3px 0 0 var(--mint); }
+.play.fantasy.big { box-shadow: inset 3px 0 0 var(--mint); }
+.play.fantasy .play-text { font-weight: 600; }
+.fbadge { font-size: 10px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; color: var(--mint-ink, #04130d); background: var(--mint); padding: 2px 7px; border-radius: 6px; }

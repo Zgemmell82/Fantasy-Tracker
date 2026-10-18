@@ -92,12 +92,13 @@ const qTitle = n => n > 4 ? 'Overtime' : ['1st', '2nd', '3rd', '4th'][n - 1] + '
 function PlayCard({ p, isNew, scored, score, game }) {
   const colorOf = useLeagueColor();
   return (
-    <article className={'play' + (p.badge ? ' big' : '') + (isNew ? ' new' : '')}>
+    <article className={'play' + (p.badge ? ' big' : '') + (p.relevant ? ' fantasy' : '') + (isNew ? ' new' : '')}>
       <div className="play-when"><b>{qLabel(p.period)}</b><span>{p.clock}</span></div>
       <div className="play-main">
-        {(game || p.badge || p.down) && (
+        {(game || p.badge || p.down || p.relevant) && (
           <div className="play-top">
             {game && <span className="play-game"><TeamLogo team={game.away} size={16} />{game.away} @ {game.home}<TeamLogo team={game.home} size={16} /></span>}
+            {p.relevant && <span className="fbadge">Fantasy</span>}
             {p.badge && <span className={'pbadge b-' + p.badge.toLowerCase()}>{p.badge}</span>}
             {p.down && <span className="play-down">{p.down}</span>}
           </div>
@@ -293,27 +294,33 @@ const SHOW_STEP = 40;
 
 function AllLive({ games, board, helper, scored }) {
   const [scope, setScope] = useState('live');          // live | week
-  const [impact, setImpact] = useState('all');          // all | mine | opp | scoring
+  const [impact, setImpact] = useState('all');          // all (every play, yours highlighted) | mine (only plays that touch your teams) | scoring
   const [limit, setLimit] = useState(SHOW_STEP);
-  const started = games.map(g => ({ g, info: boardFor(board, g.key) })).filter(x => x.info && x.info.state !== 'pre');
+  // Every NFL game on the scoreboard, not just the ones with your players; games without any get no tracked players.
+  const everyGame = useMemo(() => Object.entries(board || {}).map(([key, info]) => {
+    const [a, h] = key.split('@');
+    return { g: games.find(x => x.key === key || x.key === h + '@' + a) || { key, mine: [], theirs: [] }, info };
+  }), [games, board]);
+  const started = everyGame.filter(x => x.info.state !== 'pre');
   const liveList = started.filter(x => x.info.state === 'in');
   const list = scope === 'live' ? liveList : started;
   const feeds = useGameFeeds(list, helper, list.length > 0);
   const startedAt = useRef(Date.now());
   const rules = useContext(RulesContext);
 
-  // Every play that involves any tracked player, narrowed by the chosen leagues and side.
+  // All: every play in every game, with the ones that matter to your teams marked. For/Against: only those that matter
+  // (they gain or lose points for a player you have or face, or hurt one). Scoring: those that are scoring plays.
   const items = useMemo(() => {
     const out = [];
     list.forEach(({ g, info }) => {
       const f = feeds.byId[info.id];
       if (!f) return;
       matchPlays(f.plays, trackedFor(g), rules).forEach(m => {
-        const p = relevantPlay(m);                    // only plays that gain or lose points for your players, or hurt one
-        if (!p) return;
-        const hits = p.hits.filter(h => (impact !== 'mine' || h.side === 'mine') && (impact !== 'opp' || h.side === 'opp'));
-        if (!hits.length || (impact === 'scoring' && !p.scoring)) return;
-        out.push({ p: { ...p, hits }, game: { away: f.away || info.away, home: f.home || info.home }, gid: info.id, seen: feeds.seenAt(info.id, p.id) });
+        const rel = relevantPlay(m);
+        if (impact !== 'all' && !rel) return;
+        if (impact === 'scoring' && !m.scoring) return;
+        const p = rel ? { ...rel, relevant: true } : { ...m, hits: [] };
+        out.push({ p, game: { away: f.away || info.away, home: f.home || info.home }, gid: info.id, seen: feeds.seenAt(info.id, p.id) });
       });
     });
     return out.sort((a, b) => (b.seen - a.seen) || (b.p.period - a.p.period) || (clockSecs(a.p.clock) - clockSecs(b.p.clock)) || (b.p.seq - a.p.seq));
@@ -326,8 +333,8 @@ function AllLive({ games, board, helper, scored }) {
         <div className="feed-bar">
           <Segmented value={scope} onChange={v => { setScope(v); setLimit(SHOW_STEP); }}
             options={[['live', 'Live now' + (liveList.length ? ' · ' + liveList.length : '')], ['week', 'All games this week']]} />
-          <Segmented value={impact} onChange={v => { setImpact(v); setLimit(SHOW_STEP); }} tone={v => v === 'opp' ? 'coral' : ''}
-            options={[['all', 'All'], ['mine', 'For me'], ['opp', 'Against'], ['scoring', 'Scoring']]} />
+          <Segmented value={impact} onChange={v => { setImpact(v); setLimit(SHOW_STEP); }}
+            options={[['all', 'All'], ['mine', 'For/Against'], ['scoring', 'Scoring']]} />
           <div className="feed-meta">
             {liveList.length > 0 && <i className="dot-live" />}
             {list.length} {scope === 'live' ? 'live' : 'started'} {list.length === 1 ? 'game' : 'games'}{liveList.length ? ' · updates every 20s' : ''}
@@ -339,7 +346,7 @@ function AllLive({ games, board, helper, scored }) {
           <div className="feed-empty">
             {scope === 'live' && started.length
               ? <span>No games are live right now. <button className="text-btn" onClick={() => setScope('week')}>Show all games this week</button></span>
-              : 'Nothing to show yet. Plays appear once games with your players, or your opponents\', kick off.'}
+              : 'Nothing to show yet. Plays appear once games kick off.'}
           </div>
         )}
         {list.length > 0 && !feeds.loaded && !feeds.error && <div className="feed-empty">Loading plays…</div>}
@@ -350,7 +357,7 @@ function AllLive({ games, board, helper, scored }) {
           <PlayCard key={gid + ':' + p.id} p={p} game={game} scored={scored} isNew={seen > startedAt.current} score={game} />
         ))}
         {items.length > limit && <button className="pill-btn wide" onClick={() => setLimit(l => l + SHOW_STEP)}>Show {Math.min(SHOW_STEP, items.length - limit)} more</button>}
-        {feeds.loaded && list.length > 0 && <div className="feed-foot">Only plays that gain or lose fantasy points for a player you have or are facing, or injure one of them. Green helps you, red hurts you. Point swings are estimates using each league's own scoring where known; your leagues' real totals come from their sites.</div>}
+        {feeds.loaded && list.length > 0 && <div className="feed-foot">{impact === 'all' ? 'Every play in these games. Plays that matter to your teams are highlighted.' : 'Only plays that gain or lose fantasy points for a player you have or are facing, or injure one of them.'} Green helps you, red hurts you. Point swings are estimates using each league's own scoring where known; your leagues' real totals come from their sites.</div>}
       </div>
     </div>
   );
