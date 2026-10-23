@@ -14,7 +14,7 @@ const proj1 = n => (Math.round(n * 10) / 10).toFixed(1);
 export default function LeagueBoard({ week, wk, names, board, synced = {} }) {
   const colorOf = useLeagueColor();
   const proj = useProjections(week);
-  const [shut, setShut] = useState([]);                        // leagues folded away
+  const [openL, setOpenL] = useState([]);                      // leagues expanded (all start collapsed)
   const rows = useMemo(() => names.map(name => {
     const l = wk[name];
     const has = !!(l && (l.mine.length || l.opp.length));
@@ -23,50 +23,37 @@ export default function LeagueBoard({ week, wk, names, board, synced = {} }) {
   }), [names, wk, week, board, proj.lookup]);
 
   if (!names.length) return null;
-  const toggle = n => setShut(s => s.includes(n) ? s.filter(x => x !== n) : [...s, n]);
-  const jump = n => { setShut(s => s.filter(x => x !== n)); document.getElementById('hb-' + encodeURIComponent(n))?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  const toggle = n => setOpenL(s => s.includes(n) ? s.filter(x => x !== n) : [...s, n]);
 
   return (
     <>
       <section className="card hb-strip" aria-label="All leagues at a glance">
-        <div className="hb-strip-h">All leagues<span>{proj.loading ? 'loading projections…' : 'score · projected finish'}</span></div>
-        {rows.map(({ name, g, o, has }) => (
-          <button className="hb-srow" key={name} onClick={() => jump(name)}>
-            <span className="ltag" style={{ '--lc': colorOf(name) }}>{name}</span>
-            <span className="hb-nums">
-              <b>{has && !o.approx ? fmtPts(o.me) + ' – ' + fmtPts(o.them) : '—'}</b>
-              <em>{g.myProj != null ? 'proj ' + proj1(g.myProj) + ' – ' + proj1(g.themProj) : ''}</em>
-            </span>
-            <span className={'hb-pill ' + g.tone}><i />{g.label}</span>
-          </button>
-        ))}
-      </section>
-
-      {rows.map(({ name, l, has, o, g }) => {
-        const open = !shut.includes(name);
-        return (
-          <section className="card hb" key={name} id={'hb-' + encodeURIComponent(name)}>
-            <button className="hb-head" onClick={() => toggle(name)} aria-expanded={open}>
-              <span className="ltag" style={{ '--lc': colorOf(name) }}>{name}</span>
-              <span className={'hb-pill ' + g.tone}><i />{g.label}</span>
-              <span className={'chev' + (open ? ' open' : '')} aria-hidden="true"><Icon.chevron size={16} sw={2.5} /></span>
-            </button>
-            {open && <SyncNote s={synced[name + ':' + week]} at={l && l.at} />}
-            {open && (!has ? (
-              <p className="hb-empty">No lineup for week {week} yet. Link this league or add starters from the Locker Room tab.</p>
-            ) : (
-              <>
-                <div className="hb-totals">
-                  <div className="hb-side mine"><span>You</span><b>{o.approx ? '—' : fmtPts(o.me)}</b><em>{g.myProj != null ? 'projected ' + proj1(g.myProj) : ''}</em></div>
-                  <div className="hb-vs">vs</div>
-                  <div className="hb-side opp"><span>Opponent</span><b>{o.approx ? '—' : fmtPts(o.them)}</b><em>{g.themProj != null ? 'projected ' + proj1(g.themProj) : ''}</em></div>
+        <div className="hb-strip-h">All leagues<span>{proj.loading ? 'loading projections…' : 'tap a league to expand'}</span></div>
+        {rows.map(({ name, l, g, o, has }) => {
+          const open = openL.includes(name);
+          return (
+            <div className={'hb-item' + (open ? ' open' : '')} key={name}>
+              <button className="hb-srow" onClick={() => toggle(name)} aria-expanded={open}>
+                <span className="ltag" style={{ '--lc': colorOf(name) }}>{name}</span>
+                <span className="hb-nums">
+                  <b>{has && !o.approx ? fmtPts(o.me) + ' – ' + fmtPts(o.them) : '—'}</b>
+                  <em>{g.myProj != null ? 'proj ' + proj1(g.myProj) + ' – ' + proj1(g.themProj) : ''}</em>
+                </span>
+                <span className={'hb-pill ' + g.tone}><i />{g.label}</span>
+                <span className={'chev' + (open ? ' open' : '')} aria-hidden="true"><Icon.chevron size={16} sw={2.5} /></span>
+              </button>
+              {open && (
+                <div className="hb-body">
+                  <SyncNote s={synced[name + ':' + week]} at={l && l.at} />
+                  {!has
+                    ? <p className="hb-empty">No lineup for week {week} yet. Link this league or add starters from the Locker Room tab.</p>
+                    : <Matchup l={l} o={o} week={week} board={board} />}
                 </div>
-                <Matchup l={l} o={o} week={week} board={board} />
-              </>
-            ))}
-          </section>
-        );
-      })}
+              )}
+            </div>
+          );
+        })}
+      </section>
       {!proj.loading && !proj.lookup && rows.some(r => r.has) && (
         <p className="hint">Couldn't load Sleeper projections{proj.error ? ' (' + proj.error + ')' : ''}, so projected finishes use an average game by position.</p>
       )}
