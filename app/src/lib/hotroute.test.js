@@ -120,21 +120,27 @@ test('the swing is what happens if he scores his boom number, and the boom numbe
 });
 
 import { buildHistory, boomLean } from './history.js';
-test('players who boom more often count a little more, never beyond +/-25%', () => {
-  const h = new Map([['LA|star wideout', [30, 28, 31, 5]], ['LA|dud', [2, 3, 4, 3]], ['LA|new guy', [30]]]);
-  assert.ok(boomLean(h, 'LA|star wideout', 20).mult > 1.15);
-  assert.ok(boomLean(h, 'LA|dud', 20).mult < 0.9);
-  assert.equal(boomLean(h, 'LA|new guy', 20).mult, 1);          // one game isn't a pattern
-  assert.equal(boomLean(null, 'x', 20).mult, 1);
-  assert.ok(boomLean(new Map([['k', [99, 99, 99, 99, 99, 99]]]), 'k', 20).mult <= 1.25);
-  const built = buildHistory({ 3: { A: { mine: [{ name: 'Star Wideout', team: 'LA', pts: 12 }], opp: [] }, B: { mine: [{ name: 'Star Wideout III', team: 'LAR', pts: 18 }], opp: [] } }, 5: { A: { mine: [{ name: 'Star Wideout', team: 'LA', pts: 50 }], opp: [] } } }, 5, ['A', 'B']);
-  assert.deepEqual(built.get('LA|star wideout'), [18]);       // best score that week, and only earlier weeks
+test('players who boomed more often earlier count a little more, never beyond +/-25%', () => {
+  const h = new Map([['LA|star wideout', { games: 4, hits: 3 }], ['LA|dud', { games: 4, hits: 0 }], ['LA|new guy', { games: 1, hits: 1 }]]);
+  assert.ok(boomLean(h, 'LA|star wideout').mult > 1.15);
+  assert.ok(boomLean(h, 'LA|dud').mult < 0.9);
+  assert.equal(boomLean(h, 'LA|new guy').mult, 1);          // one game isn't a pattern
+  assert.equal(boomLean(null, 'x').mult, 1);
+  assert.ok(boomLean(new Map([['k', { games: 10, hits: 10 }]]), 'k').mult <= 1.25);
+});
+
+test('earlier weeks\' Boom data: who beat that week\'s own projection by 120% and +5', () => {
+  const wkData = pts => ({ A: { scoring: 'half', mine: [{ name: 'Star Wideout', team: 'LA', pts }], opp: [] } });
+  const lookups = { 1: { byId: {}, byTeam: {}, byName: { 'star wideout|LA': [8, 10, 12] } }, 2: { byId: {}, byTeam: {}, byName: { 'star wideout|LA': [8, 10, 12] } } };
+  const data = { 1: wkData(18), 2: wkData(11), 3: wkData(30), 5: wkData(99) };       // week 3 has no projections saved; week 5 is now
+  const h = buildHistory(data, 5, ['A'], lookups);
+  assert.deepEqual(h.get('LA|star wideout'), { games: 2, hits: 1 });                  // week 1: 18 vs 10 is a boom; week 2: 11 is not
 });
 
 test('a boom-prone player outranks an identical one without that history', () => {
   const lineup = { A: { mine: [star], opp: [], score: { mine: 70, opp: 81 } } };
   const plain = hotRoute(5, lineup, ['A'], {}, MON).forPool[0].net;
-  const hot = hotRoute(5, lineup, ['A'], {}, MON, null, new Map([['LA|star wideout', [30, 28, 31, 29]]])).forPool[0].net;
+  const hot = hotRoute(5, lineup, ['A'], {}, MON, null, new Map([['LA|star wideout', { games: 4, hits: 4 }]])).forPool[0].net;
   assert.ok(hot > plain);
 });
 

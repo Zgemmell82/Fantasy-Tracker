@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BOOM_MIN_GAIN, BOOM_RATIO, hotRoute } from './lib/hotroute.js';
 import { gamesLeft, pathsFor } from './lib/pathfacts.js';
-import { loadProjections } from './lib/projections.js';
+import { loadProjections, pastProjections } from './lib/projections.js';
+import { buildHistory } from './lib/history.js';
 import { gameState } from './lib/remaining.js';
 import { Avatar, Icon, LeagueFilter, PosChip, Segmented, Sheet, useLeagueColor } from './ui.jsx';
 import Radio from './Radio.jsx';
@@ -84,7 +85,7 @@ function Row({ r, tone, board, week }) {
           })}
         </div>
       </div>
-      {tone !== 'wash' && (
+      {tone !== 'wash' && tone !== 'boom' && (
         <div className="hr-net"><b>{sgn(pct(r.net))}</b><span>your win chance<br />if he scores {boomNeed(r)} pts</span></div>
       )}
     </div>
@@ -106,14 +107,16 @@ function Mini({ r, tone, board }) {
   return (
     <div className={'hr-mini ' + tone}>
       <div className="hr-mini-main">
-        <div className="hr-mini-who"><Avatar p={r.player} size={24} side={side} /><span className="hr-name" title={r.player.name}>{shortName(r.player.name)}</span></div>
+        <div className="hr-mini-who"><Avatar p={r.player} size={20} side={side} /><span className="hr-name" title={r.player.name}>{shortName(r.player.name)}</span></div>
         <div className="hr-meta"><PosChip pos={r.player.pos} /><span>{r.player.team}</span>{live ? <em className="live"><i />Live</em> : <em>{when(r, board)}</em>}</div>
         <span className="hr-chips">{r.lines.map(l => (
           <span key={l.league + l.side} className={'hr-chip ' + l.side} style={{ '--lc': colorOf(l.league) }}><i />{l.league}<em>{l.side === 'mine' ? 'Yours' : 'Against'}</em></span>
         ))}</span>
-        <div className="hr-mini-cap">win chance if he scores {boomNeed(r)} pts</div>
       </div>
-      <b className={'hr-net-n ' + (p > 0 ? 'up' : 'down')} title="Combined across all your leagues">{sgn(p)}</b>
+      <div className="hr-mini-right" title="Combined across all your leagues">
+        <b className={'hr-net-n ' + (p > 0 ? 'up' : 'down')}>{sgn(p)}</b>
+        <span className="hr-mini-cap">win chance if he scores {boomNeed(r)} pts</span>
+      </div>
     </div>
   );
 }
@@ -164,6 +167,20 @@ function Section({ title, sub, tone, rows, board, week, sort }) {
   );
 }
 
+// Each earlier week's Sleeper projections (saved copies, else downloaded once), to judge who boomed in those weeks.
+function usePastProjections(week, data) {
+  const [lookups, setLookups] = useState({});
+  const weeks = Object.keys(data || {}).map(Number).filter(w => w < week).sort((a, b) => a - b).join(',');
+  useEffect(() => {
+    let stop = false;
+    weeks.split(',').filter(Boolean).forEach(w => {
+      pastProjections(Number(w)).then(l => { if (!stop && l) setLookups(prev => (prev[w] === l ? prev : { ...prev, [w]: l })); });
+    });
+    return () => { stop = true; };
+  }, [weeks]);
+  return lookups;
+}
+
 // Sleeper's projections for the week; null while loading or if they can't be loaded (the odds then use position averages).
 export function useProjections(week) {
   const [state, setState] = useState({ week: 0, lookup: null, error: '' });
@@ -178,8 +195,10 @@ export function useProjections(week) {
   return { lookup: current ? state.lookup : null, error: current ? state.error : '', loading: !current };
 }
 
-export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, helper, history }) {
+export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, helper, data }) {
   const proj = useProjections(week);
+  const past = usePastProjections(week, data);
+  const history = useMemo(() => buildHistory(data, week, leagues, past), [data, week, leagues.join('|'), past]);   // eslint-disable-line react-hooks/exhaustive-deps
   const [help, setHelp] = useState(false);
   const hr = useMemo(() => hotRoute(week, wk, shown, board, undefined, proj.lookup, history), [week, wk, shown, board, proj.lookup, history]);   // eslint-disable-line react-hooks/exhaustive-deps
   const allDone = hr.leagues.length > 0 && hr.leagues.every(o => o.done);
@@ -222,7 +241,7 @@ export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, 
       {view === 'boom' && <Section tone="boom" title="Booming" sub="well over projection in at least one league" rows={hr.boom} board={board} week={week} sort="over" />}
       {view === 'all' && <>
         <Cheer hr={hr} board={board} week={week} />
-        <Section tone="wash" title="Cancels out" sub="helps you in one league, hurts in another" rows={hr.wash.filter(r => !boomKeys.has(r.key))} board={board} week={week} sort="swing" />
+        <Section tone="wash" title="Two-way players" sub="help you in one league, hurt you in another" rows={hr.wash.filter(r => !boomKeys.has(r.key))} board={board} week={week} sort="swing" />
       </>}
       {view === 'boom' && !hr.boom.length && hr.leagues.length > 0 && (
         <div className="card empty">

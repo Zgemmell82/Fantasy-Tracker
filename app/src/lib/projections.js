@@ -76,6 +76,14 @@ async function nameIndex() {
   return map;
 }
 
+// An earlier week's projections: whatever copy is saved on the device, however old (a finished week's numbers don't
+// change), else a download. Returns null if neither works.
+export async function pastProjections(week) {
+  const saved = load(LS_PROJ(week), null);
+  if (saved && saved.lookup && saved.lookup.count > 0) return saved.lookup;
+  try { return await loadProjections(week); } catch (e) { return null; }
+}
+
 // The week's projections: the saved copy if it is fresh, else a new download. Returns the lookup, or throws.
 export async function loadProjections(week, { force = false } = {}) {
   const saved = load(LS_PROJ(week), null);

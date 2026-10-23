@@ -25,14 +25,8 @@ const CV = { QB: 0.42, RB: 0.6, WR: 0.62, TE: 0.67, K: 0.45, DEF: 0.65, IDP: 0.8
 const KEY = { QB: 'QB', RB: 'RB', FB: 'RB', WR: 'WR', TE: 'TE', K: 'K', PK: 'K', DEF: 'DEF' };
 const posKey = pos => KEY[String(pos || '').toUpperCase()] || 'IDP';
 
-// A player is "booming" in a league when his live score is at least 120% of his original projection in that
-// league's scoring, and at least 5 points over it (so a 3-point projection that becomes 4 doesn't count).
-export const BOOM_RATIO = 1.2, BOOM_MIN_GAIN = 5;
-export const boomOf = (pts, proj) => typeof pts === 'number' && proj != null && proj > 0 && pts >= proj * BOOM_RATIO && pts - proj >= BOOM_MIN_GAIN;
-// The points a player has to reach to count as booming: 120% of his projection and at least 5 over it.
-export const boomPoints = proj => Math.round(Math.max(proj * BOOM_RATIO, proj + BOOM_MIN_GAIN) * 10) / 10;
-// Live score against projection, as a fraction (0.1 = 10% over). null without both numbers.
-export const overBy = (pts, proj) => typeof pts === 'number' && proj != null && proj > 0 ? (pts - proj) / proj : null;
+import { BOOM_MIN_GAIN, BOOM_RATIO, boomOf, boomPoints, overBy } from './boom.js';
+export { BOOM_MIN_GAIN, BOOM_RATIO, boomOf, boomPoints, overBy };
 
 // Win probability swing needed before a player counts as a root-for or root-against.
 export const MIN_SWING = 0.02;
@@ -121,7 +115,7 @@ export function hotRoute(week, wk, leagues, board, now = Date.now(), lookup = nu
     const r = byPlayer.get(key);
     r.projected = r.projected || x.projected;
     const raw = boom(o, x);
-    const lean = boomLean(history, key, x.boomPts);
+    const lean = boomLean(history, key);
     const swing = raw * lean.mult;
     r.net += swing;
     const pts = typeof x.p.pts === 'number' ? x.p.pts : null;

@@ -832,13 +832,14 @@ button.lrow:active { background: var(--surface-3); }
 .hr-mini-main { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .hr-mini .hr-name { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hr-mini .hr-meta { font-size: 11px; gap: 4px; flex-wrap: wrap; }
-.hr-mini-cap { font-size: 10px; color: var(--muted); line-height: 1.25; }
+.hr-mini-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; max-width: 60px; text-align: right; }
+.hr-mini-cap { font-size: 9px; color: var(--muted); line-height: 1.2; }
 .hr-mini-foot { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .hr-chips { display: flex; flex-wrap: wrap; gap: 3px; min-width: 0; }
 .hr-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border-radius: 999px; font-size: 10.5px; font-weight: 700; color: var(--lct, var(--lc)); background: color-mix(in srgb, var(--lc) 15%, transparent); white-space: nowrap; }
 .hr-chip i { width: 5px; height: 5px; border-radius: 50%; background: var(--lc); }
 .hr-chip em { font-style: normal; font-weight: 800; opacity: .85; }
-.hr-net-n { font-size: 19px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; flex: none; align-self: center; }
+.hr-net-n { font-size: 18px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; flex: none; align-self: center; }
 .hr-net-n.up { color: var(--mint); } .hr-net-n.down { color: var(--coral); }
 .hr-none { margin: 8px 0; font-size: 12.5px; color: var(--muted); }
 
