@@ -2,7 +2,7 @@
 import { SEASON } from './season.js';
 import { SCHEDULE_ALL } from '../data.js';
 import { normTeam } from './teams.js';
-import { DEFAULT_RULES, rulesFor } from './scoring.js';
+import { DEFAULT_RULES, IDP_RULES, isIdp, rulesFor } from './scoring.js';
 
 const SITE = 'https://site.api.espn.com';
 const NFL = '/apis/site/v2/sports/football/nfl/';
@@ -198,6 +198,36 @@ export function estimate(play, re, role, rules = DEFAULT_RULES) {
   return Math.round(pts * 10) / 10;
 }
 
+// What a play was worth to one individual defensive player. ESPN lists tackle credit in parentheses at the end of the
+// play: one name is a solo tackle, two names are assists. A sack with one name is a full sack, with two it's split.
+// Also: passes defensed ("defended by X"), interceptions, forced fumbles ("FUMBLES (X)"), recoveries
+// ("RECOVERED by HOU-X"), defensive touchdowns, and a tackle for loss (a tackle on a play for negative yards).
+export function idpPoints(play, re, rules = IDP_RULES) {
+  const t = play.text;
+  const here = new RegExp(re);
+  let pts = 0;
+  const groups = [...t.matchAll(/\(([^()]*)\)/g)].map(m => m[1]).filter(g => here.test(g));
+  const forced = new RegExp('FUMBLES[^.]*?\\(([^)]*)\\)').exec(t);
+  const isForcer = !!(forced && here.test(forced[1]));
+  const sack = /\bsacked\b/i.test(t);
+  const lost = (() => { const m = t.match(/for (-?\d+) yards?/); return play.yards != null ? play.yards < 0 : !!m && Number(m[1]) < 0; })();
+  groups.forEach(g => {
+    if (isForcer && forced[1] === g) return;                       // that group is the forced-fumble credit, handled below
+    const names = g.split(/[;,]/).map(x => x.trim()).filter(Boolean);
+    if (sack) pts += rules.sack / names.length;
+    else {
+      pts += names.length > 1 ? rules.ast : rules.solo;
+      if (lost) pts += rules.tfl;
+    }
+  });
+  if (isForcer) pts += rules.ff;
+  if (new RegExp('RECOVERED by [A-Z]{2,3}-' + re).test(t)) pts += rules.fr;
+  if (new RegExp('(?:defended|broken up|deflected) by\\s+' + re, 'i').test(t)) pts += rules.pd;
+  if (new RegExp('INTERCEPTED by\\s+' + re).test(t)) pts += rules.int;
+  if (/TOUCHDOWN/i.test(t) && play.scoredBy && play.scoredBy !== play.offense && (new RegExp('INTERCEPTED by\\s+' + re).test(t) || new RegExp('RECOVERED by [A-Z]{2,3}-' + re).test(t))) pts += rules.td;
+  return Math.round(pts * 100) / 100;
+}
+
 export function roleOf(text, re) {
   if (new RegExp(re + '\\s+(?:\\d+\\s+yard field goal|extra point)').test(text)) return 'kicker';
   if (new RegExp(re + '\\s+(?:pass|sacked|spiked)').test(text)) return 'passer';
@@ -229,9 +259,10 @@ export function matchPlays(plays, tracked, rulesByLeague = {}) {
     const hits = [];
     people.forEach(p => {
       if (!new RegExp(p.re).test(play.text)) return;
-      const role = roleOf(play.text, p.re);
+      const idp = isIdp(p.pos);
+      const role = idp ? 'defender' : roleOf(play.text, p.re);
       const byLeague = {};
-      (p.leagues && p.leagues.length ? p.leagues : ['']).forEach(l => { byLeague[l] = estimate(play, p.re, role, rulesFor(rulesByLeague[l], p.pos)); });
+      (p.leagues && p.leagues.length ? p.leagues : ['']).forEach(l => { byLeague[l] = idp ? idpPoints(play, p.re) : estimate(play, p.re, role, rulesFor(rulesByLeague[l], p.pos)); });
       const vals = Object.values(byLeague);
       const mixed = vals.some(v => v !== vals[0]);
       hits.push({ ...p, role, byLeague, mixed, est: mixed ? Math.round(vals.reduce((n, v) => n + v, 0) / vals.length * 10) / 10 : vals[0] });

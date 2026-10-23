@@ -7,6 +7,12 @@ export const DEFAULT_RULES = { rec: 0.5, recYd: 0.1, recTd: 6, rushYd: 0.1, rush
 const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const pick = (obj, keys) => { for (const k of keys) { const v = num(obj[k]); if (v != null) return v; } return null; };
 
+// Individual defensive players (IDP) are scored the same in every league: solo and assisted tackles, tackles for loss,
+// passes defensed, sacks, interceptions, forced and recovered fumbles, and defensive touchdowns.
+export const IDP_RULES = { solo: 1.5, ast: 0.75, tfl: 0.5, pd: 2, sack: 2.5, int: 5, ff: 4, fr: 3, td: 6 };
+export const IDP_POSITIONS = new Set(['DL', 'DE', 'DT', 'LB', 'ILB', 'OLB', 'MLB', 'DB', 'CB', 'S', 'SS', 'FS', 'EDR', 'IDP']);
+export const isIdp = pos => IDP_POSITIONS.has(String(pos || '').toUpperCase());
+
 // Sleeper league.scoring_settings -> rules.
 export function sleeperRules(s) {
   if (!s || typeof s !== 'object') return null;

@@ -43,3 +43,37 @@ test('a format chosen under Source overrides detected receptions only', () => {
   assert.equal(leagueRules({ scoring: 'std' }, null).rec, 0);
   assert.equal(leagueRules({}, null), undefined);
 });
+
+import { idpPoints } from './pbp.js';
+import { IDP_RULES, isIdp } from './scoring.js';
+test('individual defensive players score tackles, sacks, takeaways and more', () => {
+  const pl = (text, extra = {}) => ({ text, offense: 'HST', scoredBy: '', yards: null, ...extra });
+  const re = n => nameRe(n);
+  // solo and assisted tackles
+  assert.equal(idpPoints(pl('(Shotgun) T.Lawrence pass short right to B.Strange for 6 yards (D.Stingley; A.Al-Shaair).'), re('Derek Stingley')), 0.75);
+  assert.equal(idpPoints(pl('J.Mixon right guard for 3 yards (A.Al-Shaair).'), re('Azeez Al-Shaair')), 1.5);
+  // tackle for loss adds .5
+  assert.equal(idpPoints(pl('J.Mixon right guard for -2 yards (A.Al-Shaair).', { yards: -2 }), re('Azeez Al-Shaair')), 2);
+  // sacks: full for one name, split between two
+  assert.equal(idpPoints(pl('C.Stroud sacked at HST 20 for -8 yards (A.Donald).', { yards: -8 }), re('Aaron Donald')), 2.5);
+  assert.equal(idpPoints(pl('C.Stroud sacked at HST 20 for -8 yards (A.Donald; V.Epenesa).', { yards: -8 }), re('Aaron Donald')), 1.25);
+  // pass defensed, interception, touchdown
+  assert.equal(idpPoints(pl('T.Lawrence pass incomplete deep left to B.Strange, defended by K.Lassiter.'), re('Kamari Lassiter')), 2);
+  assert.equal(idpPoints(pl('C.Stroud pass INTERCEPTED by D.Lamb at JAX 40 for 40 yards, TOUCHDOWN', { scoredBy: 'JAX', offense: 'HST' }), re('Dane Lamb')), 11);
+  // forced fumble and recovery
+  const fum = 'J.Mixon right guard for 3 yards (D.Lloyd). FUMBLES (D.Lloyd), RECOVERED by JAX-A.Smith at HST 41.';
+  assert.equal(idpPoints(pl(fum), re('Devin Lloyd')), 4);
+  assert.equal(idpPoints(pl(fum), re('Andre Smith')), 3);
+  assert.equal(idpPoints(pl('nothing about him'), re('Zed Nobody')), 0);
+  assert.equal(isIdp('LB'), true);
+  assert.equal(isIdp('WR'), false);
+  assert.equal(IDP_RULES.sack, 2.5);
+});
+
+test('a linebacker in your lineup earns points from the plays he is in', async () => {
+  const { matchPlays: mp } = await import('./pbp.js');
+  const tracked = [{ uid: 'lb', name: 'Azeez Al-Shaair', pos: 'LB', team: 'HST', side: 'mine', leagues: ['A'] }];
+  const play = { id: '1', seq: 1, text: 'J.Mixon right guard for 3 yards (A.Al-Shaair).', type: '', offense: 'JAX', scoredBy: '', yards: 3 };
+  const [m] = mp([play], tracked);
+  assert.deepEqual([m.hits[0].role, m.hits[0].est], ['defender', 1.5]);
+});

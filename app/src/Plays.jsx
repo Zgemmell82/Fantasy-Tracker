@@ -140,14 +140,16 @@ export function Feed({ game, info, helper, scored, leagues = [], mode = 'plays' 
   const tracked = useMemo(() => trackedFor(game), [game]);
   const rules = useContext(RulesContext);
   const matched = useMemo(() => feed.plays ? matchPlays(feed.plays, tracked, rules) : null, [feed.plays, tracked, rules]);   // oldest first
-  const plays = useMemo(() => matched ? [...matched].reverse() : null, [matched]);   // newest first
+  // Live games read newest first; once a game is over the play-by-play runs in the order things happened.
+  const final = !!info && info.state === 'post';
+  const plays = useMemo(() => matched ? (final ? matched : [...matched].reverse()) : null, [matched, final]);
 
   if (!info) return <div className="feed"><div className="feed-empty">Looking up this game on ESPN…</div></div>;
   if (info.state === 'pre') return <div className="feed"><div className="feed-empty"><Icon.clock size={18} />{mode === 'recap' ? 'The recap fills in once the game starts' : 'Play-by-play starts at kickoff'} · {game.time}</div></div>;
 
   const shown = !plays ? [] : plays.filter(p => filter === 'all' || (filter === 'players' ? p.hits.length : p.scoring));
   let lastQ = null;
-  const final = info.state === 'post';
+
   const scoreOf = feed.away ? { away: feed.away, home: feed.home } : null;
 
   if (mode === 'recap') {
@@ -165,7 +167,7 @@ export function Feed({ game, info, helper, scored, leagues = [], mode = 'plays' 
       <div className="feed-bar">
         <Segmented value={filter} onChange={setFilter} options={[['all', 'All'], ['players', 'Players'], ['scoring', 'Scoring']]} />
         <div className="feed-meta">
-          {live ? <><i className="dot-live" />Live · updates every 20s</> : 'Final'}
+          {live ? <><i className="dot-live" />Live · updates every 20s</> : final ? 'Final · in order, first play to last' : 'Final'}
           {feed.at ? ' · ' + new Date(feed.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''}
         </div>
       </div>
