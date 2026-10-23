@@ -3,7 +3,7 @@ import { boardFor, fetchPlays, fetchScoreboard, matchPlays, nextPollMs } from '.
 import { fmtPts } from './lib/games.js';
 import { buildRecap } from './lib/recap.js';
 import { effectOf, relevantPlay } from './lib/relevance.js';
-import { Avatar, Icon, LeagueFilter, Segmented, Switch, TeamLogo, useLeagueColor } from './ui.jsx';
+import { Avatar, Icon, LeagueFilter, Segmented, TeamLogo, useLeagueColor } from './ui.jsx';
 
 // Each league's own scoring rules ({ leagueName: rules }), so point swings match the league's totals.
 export const RulesContext = createContext({});
@@ -336,11 +336,16 @@ function AllLive({ games, board, helper, scored }) {
             options={[['all', 'All'], ['mine', 'For/Against'], ['scoring', 'Scoring']]} />
           <div className="feed-meta">
             {liveList.length > 0 && <i className="dot-live" />}
-            {list.length} {list.length === 1 ? 'game' : 'games'} this week{liveList.length ? ' · ' + liveList.length + ' live, updates every 20s' : ''}
+            {list.length} {list.length === 1 ? 'game' : 'games'} this week{liveList.length ? ' · ' + liveList.length + ' live' : ''}
             {feeds.at ? ' · ' + new Date(feeds.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''}
+            {impact === 'scoring' && (
+              <button className="mini-sw" role="switch" aria-checked={allScoring} title={allScoring ? 'Every scoring play; yours are highlighted' : 'Only players for or against your teams'}
+                onClick={() => { setAllScoring(v => !v); setLimit(SHOW_STEP); }}>
+                All players<span className={'switch' + (allScoring ? ' on' : '')} aria-hidden="true"><span /></span>
+              </button>
+            )}
           </div>
         </div>
-        {impact === 'scoring' && <Switch on={allScoring} onChange={v => { setAllScoring(v); setLimit(SHOW_STEP); }} label="Scoring from all players" hint={allScoring ? 'Every scoring play. Yours are highlighted.' : 'Only scoring plays by players for or against your teams.'} />}
         {feeds.error && <div className="banner err"><Icon.alert size={16} sw={2.5} /><span>{feeds.error}</span></div>}
         {!list.length && (
           <div className="feed-empty">Nothing to show yet. Plays appear once games kick off.</div>
