@@ -3,7 +3,7 @@ import { boardFor, fetchPlays, fetchScoreboard, matchPlays, nextPollMs } from '.
 import { fmtPts } from './lib/games.js';
 import { buildRecap } from './lib/recap.js';
 import { effectOf, relevantPlay } from './lib/relevance.js';
-import { Avatar, Icon, LeagueFilter, Segmented, TeamLogo, useLeagueColor } from './ui.jsx';
+import { Avatar, Icon, LeagueFilter, Segmented, Switch, TeamLogo, useLeagueColor } from './ui.jsx';
 
 // Each league's own scoring rules ({ leagueName: rules }), so point swings match the league's totals.
 export const RulesContext = createContext({});
@@ -297,6 +297,7 @@ const SHOW_STEP = 40;
 function AllLive({ games, board, helper, scored }) {
   const [impact, setImpact] = useState('all');          // all (every play, yours highlighted) | mine (only plays that touch your teams) | scoring
   const [limit, setLimit] = useState(SHOW_STEP);
+  const [allScoring, setAllScoring] = useState(false);    // Scoring tab: every scoring play, or only those that touch your teams
   // Every NFL game on the scoreboard, not just the ones with your players; games without any get no tracked players.
   const everyGame = useMemo(() => Object.entries(board || {}).map(([key, info]) => {
     const [a, h] = key.split('@');
@@ -318,15 +319,14 @@ function AllLive({ games, board, helper, scored }) {
       if (!f) return;
       matchPlays(f.plays, trackedFor(g), rules).forEach(m => {
         const rel = relevantPlay(m);
-        if (impact !== 'all' && !rel) return;
-        if (impact === 'scoring' && !m.scoring) return;
+        if (impact === 'scoring' ? !m.scoring || (!allScoring && !rel) : impact !== 'all' && !rel) return;
         const p = rel ? { ...rel, relevant: true } : { ...m, hits: [] };
         out.push({ p, game: { away: f.away || info.away, home: f.home || info.home }, gid: info.id, seen: feeds.seenAt(info.id, p.id) });
       });
     });
     return out.sort((a, b) => (b.seen - a.seen) || (b.p.period - a.p.period) || (clockSecs(a.p.clock) - clockSecs(b.p.clock)) || (b.p.seq - a.p.seq));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feeds.byId, impact, board, rules]);
+  }, [feeds.byId, impact, allScoring, board, rules]);
 
   return (
     <div className="stack">
@@ -340,6 +340,7 @@ function AllLive({ games, board, helper, scored }) {
             {feeds.at ? ' · ' + new Date(feeds.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''}
           </div>
         </div>
+        {impact === 'scoring' && <Switch on={allScoring} onChange={v => { setAllScoring(v); setLimit(SHOW_STEP); }} label="Scoring from all players" hint={allScoring ? 'Every scoring play. Yours are highlighted.' : 'Only scoring plays by players for or against your teams.'} />}
         {feeds.error && <div className="banner err"><Icon.alert size={16} sw={2.5} /><span>{feeds.error}</span></div>}
         {!list.length && (
           <div className="feed-empty">Nothing to show yet. Plays appear once games kick off.</div>
