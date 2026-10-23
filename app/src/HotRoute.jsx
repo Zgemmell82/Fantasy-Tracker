@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BOOM_MIN_GAIN, BOOM_RATIO, hotRoute } from './lib/hotroute.js';
-import { gamesLeft, OPENS_AT, pathsFor } from './lib/pathfacts.js';
+import { gamesLeft, pathsFor } from './lib/pathfacts.js';
 import { loadProjections } from './lib/projections.js';
 import { gameState } from './lib/remaining.js';
 import { Avatar, Icon, LeagueFilter, PosChip, Segmented, Sheet, useLeagueColor } from './ui.jsx';
@@ -181,18 +181,6 @@ export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, 
   const gl = gamesLeft(week, board);
   const boomKeys = new Set(hr.boom.map(r => r.key));           // booming players live on the BOOM tab only
 
-  if (!gl.open) {
-    return (
-      <div className="stack">
-        <div className="card empty">
-          <Icon.route size={28} />
-          <div className="empty-t">The Two-Minute Drill opens when {OPENS_AT} games are left</div>
-          <div className="empty-d">{gl.started ? gl.left + ' of ' + gl.total + ' games are still to play this week. ' : 'Week ' + week + ' hasn\'t started yet. '}Then each league gets a direct path to victory: who is left on each side and the margin that decides it.</div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="stack">
       <LeagueFilter leagues={leagues} sel={sel} onChange={onSel} />
@@ -207,7 +195,7 @@ export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, 
         </div>
       )}
 
-      {hr.leagues.length > 0 && <PathToVictory outlooks={hr.leagues} />}
+      {gl.open && hr.leagues.length > 0 && <PathToVictory outlooks={hr.leagues} />}
 
       {hr.leagues.length > 0 && (
         <section className="hr-sec">
