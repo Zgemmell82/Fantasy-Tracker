@@ -58,7 +58,7 @@ test('against you in a dead-even matchup and nowhere else: root against', () => 
   const r = hotRoute(5, { A: { mine: [mine], opp: [star], score: { mine: 80, opp: 80 } } }, ['A'], {}, MON);
   assert.equal(r.rootAgainst.length, 1);
   assert.equal(r.rootAgainst[0].player.name, 'Star Wideout');
-  assert.ok(r.rootAgainst[0].net < -0.2);
+  assert.ok(r.rootAgainst[0].net < -0.15);
   assert.equal(r.rootFor[0].player.name, 'My WR');
 });
 
@@ -106,4 +106,15 @@ test('each line carries the live score, the projection in that league\'s scoring
   assert.deepEqual([half.proj, half.boom], [10, true]);       // 18 vs 10: +80%
   assert.deepEqual([ppr.proj, ppr.boom], [12, true]);         // 18 vs 12: +50%, +6
   assert.ok(Math.abs(half.over - 0.8) < 1e-9);
+});
+
+test('the swing is what happens if he scores his boom number, and the boom number is 120% of projection or +5', async () => {
+  const { boomPoints } = await import('./hotroute.js');
+  assert.equal(boomPoints(20), 25);       // +5 beats 120% (24)
+  assert.equal(boomPoints(30), 36);       // 120% beats +5
+  const lookup = { byId: {}, byTeam: {}, byName: { 'star wideout|LA': [8, 10, 12] } };
+  const half = hotRoute(5, { A: { mine: [star], opp: [], score: { mine: 70, opp: 81 }, scoring: 'half' }, B: { mine: [star], opp: [], score: { mine: 70, opp: 81 }, scoring: 'ppr' } }, ['A', 'B'], {}, MON, lookup);
+  const [a, b] = half.forPool[0].lines;
+  assert.deepEqual([a.boomPts, b.boomPts], [15, 17]);      // 10 -> 15, 12 -> 17: the higher one is what the row shows
+  assert.ok(a.swing > 0 && b.swing > 0);
 });

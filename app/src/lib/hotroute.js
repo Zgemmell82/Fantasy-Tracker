@@ -28,6 +28,8 @@ const posKey = pos => KEY[String(pos || '').toUpperCase()] || 'IDP';
 // league's scoring, and at least 5 points over it (so a 3-point projection that becomes 4 doesn't count).
 export const BOOM_RATIO = 1.2, BOOM_MIN_GAIN = 5;
 export const boomOf = (pts, proj) => typeof pts === 'number' && proj != null && proj > 0 && pts >= proj * BOOM_RATIO && pts - proj >= BOOM_MIN_GAIN;
+// The points a player has to reach to count as booming: 120% of his projection and at least 5 over it.
+export const boomPoints = proj => Math.round(Math.max(proj * BOOM_RATIO, proj + BOOM_MIN_GAIN) * 10) / 10;
 // Live score against projection, as a fraction (0.1 = 10% over). null without both numbers.
 export const overBy = (pts, proj) => typeof pts === 'number' && proj != null && proj > 0 ? (pts - proj) / proj : null;
 
@@ -72,7 +74,7 @@ export function leagueOutlook(week, lineup, board, now = Date.now(), lookup = nu
     const proj = projectionFor(lookup, p, l.scoring);
     const full = proj != null ? proj : MEAN[k];                              // his whole-game average
     const spread = proj != null ? Math.max(2, CV[k] * proj) : SD[k];
-    return { p, who, f, mean: full * f, sd: spread * Math.sqrt(f), projected: proj != null, proj, game: g || null };
+    return { p, who, f, mean: full * f, sd: spread * Math.sqrt(f), projected: proj != null, proj, full, boomPts: boomPoints(full), game: g || null };
   });
   const mine = side(l.mine, 'mine'), opp = side(l.opp, 'opp');
   const known = l.score && (l.score.mine != null || l.score.opp != null);
@@ -92,11 +94,15 @@ export function leagueOutlook(week, lineup, board, now = Date.now(), lookup = nu
   };
 }
 
-// Change in your win probability if this player outperforms his average by one standard deviation.
+// Change in your win probability if this player finishes at his boom number (in this league's scoring) instead of
+// where he's expected to finish. A player already past it has nothing more to give, so 0.
 function boom(o, x) {
   if (o.done || x.sd <= 0) return 0;
+  const sofar = typeof x.p.pts === 'number' ? x.p.pts : 0;
+  const shift = Math.max(x.boomPts - (sofar + x.mean), 0);
+  if (shift <= 0) return 0;
   const base = phi(o.exp / o.sd);
-  return x.who === 'mine' ? phi((o.exp + x.sd) / o.sd) - base : phi((o.exp - x.sd) / o.sd) - base;
+  return x.who === 'mine' ? phi((o.exp + shift) / o.sd) - base : phi((o.exp - shift) / o.sd) - base;
 }
 
 // leagues: names in display order. Returns the leagues' outlooks and the players ranked into
@@ -112,7 +118,7 @@ export function hotRoute(week, wk, leagues, board, now = Date.now(), lookup = nu
     const swing = boom(o, x);
     r.net += swing;
     const pts = typeof x.p.pts === 'number' ? x.p.pts : null;
-    r.lines.push({ league: o.name, side: x.who, swing, diff: o.diff, wp: o.wp, done: o.done, pts, proj: x.proj, started: x.f < 1, over: x.f < 1 ? overBy(pts, x.proj) : null, boom: boomOf(pts, x.proj) });
+    r.lines.push({ league: o.name, side: x.who, swing, diff: o.diff, wp: o.wp, done: o.done, pts, proj: x.proj, boomPts: x.boomPts, started: x.f < 1, over: x.f < 1 ? overBy(pts, x.proj) : null, boom: boomOf(pts, x.proj) });
   }));
   const rows = [...byPlayer.values()].map(r => ({
     ...r,

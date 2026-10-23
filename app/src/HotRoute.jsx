@@ -52,7 +52,7 @@ function when(r, board, week) {
   return t.trim();
 }
 
-// One player: how much a big game from him is worth across your leagues, and why.
+// One player: how much your win chance moves if he reaches his boom number, across your leagues, and why.
 function Row({ r, tone, board, week }) {
   const colorOf = useLeagueColor();
   const booms = r.lines.filter(l => l.boom).map(l => l.over);
@@ -85,13 +85,15 @@ function Row({ r, tone, board, week }) {
         </div>
       </div>
       {tone !== 'wash' && (
-        <div className="hr-net"><b>{sgn(pct(r.net))}</b><span>your win chance<br />if he booms</span></div>
+        <div className="hr-net"><b>{sgn(pct(r.net))}</b><span>your win chance<br />if he scores {boomNeed(r)} pts</span></div>
       )}
     </div>
   );
 }
 
 const FIVE = 5;
+// The points he needs to boom. If leagues score him differently, the higher number.
+const boomNeed = r => fmtPts(Math.max(...r.lines.map(l => l.boomPts)));
 
 // One player in a Root for / Root against column: who he's with in which leagues, and how much he moves your odds.
 function Mini({ r, tone, board }) {
@@ -106,6 +108,7 @@ function Mini({ r, tone, board }) {
         <div className="hr-name">{r.player.name}</div>
         <div className="hr-meta"><PosChip pos={r.player.pos} /><span>{r.player.team}</span>{live ? <em className="live"><i />Live</em> : <em>{when(r, board)}</em>}</div>
       </div>
+      <div className="hr-mini-cap">win chance if he scores {boomNeed(r)} pts</div>
       <div className="hr-mini-foot">
         <span className="hr-chips">{r.lines.map(l => (
           <span key={l.league + l.side} className={'hr-chip ' + l.side} style={{ '--lc': colorOf(l.league) }}><i />{l.league}<em>{l.side === 'mine' ? 'Yours' : 'Against'}</em></span>
@@ -245,7 +248,7 @@ export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, 
 
       {hr.leagues.length > 0 && (
         <p className="hint hr-note">
-          Percentages are how your chance to win a league changes if the player has a big game.{' '}
+          Percentages are how your chance to win a league changes if the player scores his boom number (shown under the percentage).{' '}
           {proj.loading ? 'Loading Sleeper projections…'
             : proj.lookup && hr.projectedLeft > 0 ? 'Odds use Sleeper\'s projections for ' + hr.projectedLeft + ' of the ' + hr.playersLeft + ' player spots still to play' + (hr.projectedLeft < hr.playersLeft ? '; the rest use an average game for their position.' : '.')
             : proj.lookup ? 'Sleeper\'s projections didn\'t match these players, so odds use an average game by position.'
@@ -310,14 +313,14 @@ function HowTo({ onClose }) {
       <div className="howto">
         <div className="ht-block">
           <b>The percentage on each line</b>
-          <p>If this player has a <i>big game</i> (roughly one standard deviation above his projection), how much your chance to win <i>that league</i> changes.</p>
-          <div className="ht-ex"><span className="hr-val up">+26%</span><span>he's <b className="mint">yours</b>: a big game <b className="mint">raises</b> your win chance 26 points</span></div>
-          <div className="ht-ex"><span className="hr-val down">−10%</span><span>he's <b className="coral">theirs</b>: a big game <b className="coral">lowers</b> your win chance 10 points</span></div>
+          <p>If this player scores his <i>boom number</i> (120% of his projection, at least 5 points over it; the higher number if your leagues score him differently), how much your chance to win <i>that league</i> changes.</p>
+          <div className="ht-ex"><span className="hr-val up">+26%</span><span>he's <b className="mint">yours</b>: him booming <b className="mint">raises</b> your win chance 26 points</span></div>
+          <div className="ht-ex"><span className="hr-val down">−10%</span><span>he's <b className="coral">theirs</b>: him booming <b className="coral">lowers</b> your win chance 10 points</span></div>
           <div className="ht-ex"><span className="hr-val none">no effect</span><span>that matchup is basically decided, so his game won't change who wins</span></div>
         </div>
         <div className="ht-block">
           <b>The big number on the right</b>
-          <p>Adds his lines up across your leagues. Positive and green means a big game from him helps you overall, so you root <b className="mint">for</b> him. Negative and red means it hurts you overall, so you root <b className="coral">against</b> him.</p>
+          <p>Adds his lines up across your leagues. Positive and green means him booming helps you overall, so you root <b className="mint">for</b> him. Negative and red means it hurts you overall, so you root <b className="coral">against</b> him.</p>
         </div>
         <div className="ht-block">
           <b>Why it isn't just for and against</b>
