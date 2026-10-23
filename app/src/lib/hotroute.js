@@ -118,10 +118,13 @@ export function hotRoute(week, wk, leagues, board, now = Date.now(), lookup = nu
     ...r,
     both: r.lines.some(l => l.side === 'mine') && r.lines.some(l => l.side === 'opp')
   }));
+  // Pools for the Two-Minute Drill columns: anyone still to play who helps (or hurts) at all, so a list can refill.
+  const forPool = rows.filter(r => r.f > 0 && r.net > 0.002).sort((a, b) => b.net - a.net);
+  const againstPool = rows.filter(r => r.f > 0 && r.net < -0.002).sort((a, b) => a.net - b.net);
   const rootFor = rows.filter(r => r.net >= MIN_SWING).sort((a, b) => b.net - a.net);
   const rootAgainst = rows.filter(r => r.net <= -MIN_SWING).sort((a, b) => a.net - b.net);
   const wash = rows.filter(r => Math.abs(r.net) < MIN_SWING && r.both
     && r.lines.some(l => Math.abs(l.swing) >= MIN_SWING)).sort((a, b) => a.player.name.localeCompare(b.player.name));
   const boomRows = rows.filter(r => r.lines.some(l => l.boom)).sort((a, b) => Math.max(...b.lines.map(l => l.over ?? -1)) - Math.max(...a.lines.map(l => l.over ?? -1)));
-  return { leagues: outlooks, rootFor, rootAgainst, wash, boom: boomRows, playersLeft: outlooks.reduce((n, o) => n + o.leftMine + o.leftOpp, 0), projectedLeft: outlooks.reduce((n, o) => n + o.projectedLeft, 0) };
+  return { leagues: outlooks, rootFor, rootAgainst, wash, boom: boomRows, forPool, againstPool, playersLeft: outlooks.reduce((n, o) => n + o.leftMine + o.leftOpp, 0), projectedLeft: outlooks.reduce((n, o) => n + o.projectedLeft, 0) };
 }

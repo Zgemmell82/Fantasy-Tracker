@@ -91,6 +91,52 @@ function Row({ r, tone, board, week }) {
   );
 }
 
+const FIVE = 5;
+
+// One player in a Root for / Root against column: who he's with in which leagues, and how much he moves your odds.
+function Mini({ r, tone, board }) {
+  const colorOf = useLeagueColor();
+  const side = tone === 'for' ? 'mine' : 'opp';
+  const live = when(r, board) === 'Live';
+  const p = pct(r.net);
+  return (
+    <div className={'hr-mini ' + tone}>
+      <Avatar p={r.player} size={34} side={side} />
+      <div className="hr-mini-main">
+        <div className="hr-name">{r.player.name}</div>
+        <div className="hr-meta"><PosChip pos={r.player.pos} /><span>{r.player.team}</span>{live ? <em className="live"><i />Live</em> : <em>{when(r, board)}</em>}</div>
+      </div>
+      <div className="hr-mini-foot">
+        <span className="hr-chips">{r.lines.map(l => (
+          <span key={l.league + l.side} className={'hr-chip ' + l.side} style={{ '--lc': colorOf(l.league) }}><i />{l.league}<em>{l.side === 'mine' ? 'Yours' : 'Against'}</em></span>
+        ))}</span>
+        <b className={'hr-net-n ' + (p > 0 ? 'up' : 'down')}>{sgn(p)}</b>
+      </div>
+    </div>
+  );
+}
+
+// Root for and Root against, five each, side by side. Players whose games are over drop out and the next player
+// who still has a game to play takes the spot. Booming players are on the BOOM tab, not here.
+function Cheer({ hr, board, week }) {
+  const boom = new Set(hr.boom.map(r => r.key));
+  const fors = hr.forPool.filter(r => !boom.has(r.key)).slice(0, FIVE);
+  const against = hr.againstPool.filter(r => !boom.has(r.key)).slice(0, FIVE);
+  if (!fors.length && !against.length) return null;
+  return (
+    <div className="hr-cols">
+      <section className="hr-col">
+        <div className="hr-sec-h for"><i />Root for<span>helps you</span></div>
+        <div className="card hr-list">{fors.length ? fors.map(r => <Mini key={r.key} r={r} tone="for" board={board} />) : <p className="hr-none">No one left to cheer for.</p>}</div>
+      </section>
+      <section className="hr-col">
+        <div className="hr-sec-h against"><i />Root against<span>hurts you</span></div>
+        <div className="card hr-list">{against.length ? against.map(r => <Mini key={r.key} r={r} tone="against" board={board} />) : <p className="hr-none">No one left to cheer against.</p>}</div>
+      </section>
+    </div>
+  );
+}
+
 const TOP = 8;
 const boomHelp = 'Boom: live score is at least ' + Math.round(BOOM_RATIO * 100) + '% of his original projection in that league\'s scoring, and at least ' + BOOM_MIN_GAIN + ' points over it.';
 const bestOver = r => Math.max(...r.lines.map(l => l.over ?? -9));
@@ -130,7 +176,7 @@ export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, 
   const allDone = hr.leagues.length > 0 && hr.leagues.every(o => o.done);
   const [view, setView] = useState('all');          // all | boom
   const gl = gamesLeft(week, board);
-  const [sort, setSort] = useState('swing');         // swing | over
+  const boomKeys = new Set(hr.boom.map(r => r.key));           // booming players live on the BOOM tab only
 
   if (!gl.open) {
     return (
@@ -167,21 +213,19 @@ export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, 
         </section>
       )}
 
-      {(hr.rootFor.length > 0 || hr.rootAgainst.length > 0 || hr.wash.length > 0 || hr.boom.length > 0) && (
+      {(hr.forPool.length > 0 || hr.againstPool.length > 0 || hr.wash.length > 0 || hr.boom.length > 0) && (
         <>
           <div className="hr-ctl">
             <Segmented value={view} onChange={setView} options={[['all', 'All players'], ['boom', 'BOOM' + (hr.boom.length ? ' · ' + hr.boom.length : '')]]} />
-            <Segmented value={sort} onChange={setSort} options={[['swing', 'Sort: win swing'], ['over', 'Sort: % over proj']]} />
           </div>
           <div className="hr-legend"><span className="boom-badge">BOOM</span><span>{boomHelp} Worked out separately for each league.</span></div>
           <button className="hr-help" onClick={() => setHelp(true)}><Icon.alert size={15} sw={2.5} />How to read these numbers</button>
         </>
       )}
-      <Section tone="boom" title="Booming" sub="well over projection in at least one league" rows={hr.boom} board={board} week={week} sort="over" />
+      {view === 'boom' && <Section tone="boom" title="Booming" sub="well over projection in at least one league" rows={hr.boom} board={board} week={week} sort="over" />}
       {view === 'all' && <>
-        <Section tone="for" title="Root for" sub="a big game helps your win chance" rows={hr.rootFor} board={board} week={week} sort={sort} />
-        <Section tone="against" title="Root against" sub="a big game hurts your win chance" rows={hr.rootAgainst} board={board} week={week} sort={sort} />
-        <Section tone="wash" title="Cancels out" sub="helps you in one league, hurts in another" rows={hr.wash} board={board} week={week} sort={sort} />
+        <Cheer hr={hr} board={board} week={week} />
+        <Section tone="wash" title="Cancels out" sub="helps you in one league, hurts in another" rows={hr.wash.filter(r => !boomKeys.has(r.key))} board={board} week={week} sort="swing" />
       </>}
       {view === 'boom' && !hr.boom.length && hr.leagues.length > 0 && (
         <div className="card empty">
@@ -191,7 +235,7 @@ export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, 
         </div>
       )}
 
-      {view === 'all' && hr.leagues.length > 0 && !hr.rootFor.length && !hr.rootAgainst.length && !hr.wash.length && !hr.boom.length && (
+      {view === 'all' && hr.leagues.length > 0 && !hr.forPool.length && !hr.againstPool.length && !hr.wash.length && (
         <div className="card empty">
           <Icon.route size={28} />
           <div className="empty-t">{allDone ? 'Week ' + week + ' is in the books' : 'Nothing swings your week right now'}</div>
