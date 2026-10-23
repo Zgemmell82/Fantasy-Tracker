@@ -20,6 +20,7 @@ import { syncYahoo, yahooLeagues, startYahooSignIn, yahooStatus, yahooDisconnect
 import { takeYahooCode } from './lib/yahoo-return.js';
 import { PlaysScreen, RulesContext, useScoreboard } from './Plays.jsx';
 import { leagueRules } from './lib/scoring.js';
+import { buildHistory } from './lib/history.js';
 import HotRoute, { useProjections } from './HotRoute.jsx';
 import { MatchCell } from './MatchCell.jsx';
 import LeagueBoard from './Home.jsx';
@@ -383,6 +384,7 @@ function Tracker({ user, onSignOut }) {
     return next;
   }), [week]);
   const alertCounts = alertSummary(applyChecks(alerts, acks).open).byLeague;
+  const history = useMemo(() => buildHistory(db.data, week, names), [db.data, week, names.join('|')]);   // eslint-disable-line react-hooks/exhaustive-deps
   const rulesByLeague = useMemo(() => Object.fromEntries(names.map(n => [n, leagueRules(wk[n], db.conn[n])])), [names.join('|'), wk, db.conn]);   // eslint-disable-line react-hooks/exhaustive-deps
   const now = Date.now();
   const remain = Object.fromEntries(names.map(n => [n, leagueRemaining(week, wk[n], board, now)]));
@@ -420,7 +422,7 @@ function Tracker({ user, onSignOut }) {
         {screen === 'games'
           ? <Games week={week} wk={wk} names={shown} leagues={names} sel={sel} onSel={setLgSel} board={board} onMatchup={setMatchupFor} synced={db.synced} alerts={alerts.filter(a => a.leagues.some(l => shown.includes(l)))} acks={acks} setAck={setAck} injReady={!!inj.lookup} injError={inj.error} />
           : screen === 'hot'
-          ? <HotRoute week={week} wk={wk} leagues={names} shown={shown} sel={sel} onSel={setLgSel} board={board} helper={db.espnHelper} />
+          ? <HotRoute week={week} wk={wk} leagues={names} shown={shown} sel={sel} onSel={setLgSel} board={board} helper={db.espnHelper} history={history} />
           : screen === 'plays'
           ? <PlaysScreen games={groupByGame(week, wk, undefined, shown).games} board={board} boardError={boardError} helper={db.espnHelper} scored={scoredWeek} leagues={names} sel={sel} onSel={setLgSel} />
           : <Leagues week={week} wk={wk} leagues={db.leagues} remain={remain} alertCounts={alertCounts} onMatchup={setMatchupFor} theme={theme} onTheme={t => setThemeState(setTheme(t))} conn={db.conn} account={{ email: user.email, cloud, onSignOut: signOut, canImport: !!legacy && !db.leagues.length, onImport: importLegacy, onRetry: settle }} synced={db.synced} syncing={syncing}

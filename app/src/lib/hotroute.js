@@ -15,6 +15,7 @@ import { gameState } from './remaining.js';
 import { boardFor } from './pbp.js';
 import { normTeam } from './teams.js';
 import { playerKey } from './identity.js';
+import { boomLean } from './history.js';
 
 // Average points and spread for one starter's whole game, by position (half-PPR-ish).
 const MEAN = { QB: 18, RB: 11, WR: 11, TE: 7.5, K: 8, DEF: 7, IDP: 6 };
@@ -101,13 +102,17 @@ function boom(o, x) {
   const sofar = typeof x.p.pts === 'number' ? x.p.pts : 0;
   const shift = Math.max(x.boomPts - (sofar + x.mean), 0);
   if (shift <= 0) return 0;
+  // Given that he finishes at his boom number, his own uncertainty is gone: the margin moves by the shift and the
+  // spread left is everyone else's.
+  const rest = Math.sqrt(Math.max(o.sd * o.sd - x.sd * x.sd, 1));
   const base = phi(o.exp / o.sd);
-  return x.who === 'mine' ? phi((o.exp + shift) / o.sd) - base : phi((o.exp - shift) / o.sd) - base;
+  return x.who === 'mine' ? phi((o.exp + shift) / rest) - base : phi((o.exp - shift) / rest) - base;
 }
 
 // leagues: names in display order. Returns the leagues' outlooks and the players ranked into
 // rootFor, rootAgainst and wash (for you in some leagues and against you in others, cancelling out).
-export function hotRoute(week, wk, leagues, board, now = Date.now(), lookup = null) {
+// history (optional): earlier-week points from buildHistory; players who boom more often count a little more.
+export function hotRoute(week, wk, leagues, board, now = Date.now(), lookup = null, history = null) {
   const outlooks = leagues.map(name => ({ name, ...leagueOutlook(week, wk[name], board, now, lookup) }));
   const byPlayer = new Map();
   outlooks.forEach(o => [...o.mine, ...o.opp].forEach(x => {
@@ -115,10 +120,12 @@ export function hotRoute(week, wk, leagues, board, now = Date.now(), lookup = nu
     if (!byPlayer.has(key)) byPlayer.set(key, { key, player: x.p, f: x.f, game: x.game, net: 0, lines: [] });
     const r = byPlayer.get(key);
     r.projected = r.projected || x.projected;
-    const swing = boom(o, x);
+    const raw = boom(o, x);
+    const lean = boomLean(history, key, x.boomPts);
+    const swing = raw * lean.mult;
     r.net += swing;
     const pts = typeof x.p.pts === 'number' ? x.p.pts : null;
-    r.lines.push({ league: o.name, side: x.who, swing, diff: o.diff, wp: o.wp, done: o.done, pts, proj: x.proj, boomPts: x.boomPts, started: x.f < 1, over: x.f < 1 ? overBy(pts, x.proj) : null, boom: boomOf(pts, x.proj) });
+    r.lines.push({ league: o.name, side: x.who, swing, rawSwing: raw, lean: lean.mult, boomRate: lean.rate, diff: o.diff, wp: o.wp, done: o.done, pts, proj: x.proj, boomPts: x.boomPts, started: x.f < 1, over: x.f < 1 ? overBy(pts, x.proj) : null, boom: boomOf(pts, x.proj) });
   }));
   const rows = [...byPlayer.values()].map(r => ({
     ...r,

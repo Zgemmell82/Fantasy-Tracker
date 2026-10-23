@@ -118,3 +118,28 @@ test('the swing is what happens if he scores his boom number, and the boom numbe
   assert.deepEqual([a.boomPts, b.boomPts], [15, 17]);      // 10 -> 15, 12 -> 17: the higher one is what the row shows
   assert.ok(a.swing > 0 && b.swing > 0);
 });
+
+import { buildHistory, boomLean } from './history.js';
+test('players who boom more often count a little more, never beyond +/-25%', () => {
+  const h = new Map([['LA|star wideout', [30, 28, 31, 5]], ['LA|dud', [2, 3, 4, 3]], ['LA|new guy', [30]]]);
+  assert.ok(boomLean(h, 'LA|star wideout', 20).mult > 1.15);
+  assert.ok(boomLean(h, 'LA|dud', 20).mult < 0.9);
+  assert.equal(boomLean(h, 'LA|new guy', 20).mult, 1);          // one game isn't a pattern
+  assert.equal(boomLean(null, 'x', 20).mult, 1);
+  assert.ok(boomLean(new Map([['k', [99, 99, 99, 99, 99, 99]]]), 'k', 20).mult <= 1.25);
+  const built = buildHistory({ 3: { A: { mine: [{ name: 'Star Wideout', team: 'LA', pts: 12 }], opp: [] }, B: { mine: [{ name: 'Star Wideout III', team: 'LAR', pts: 18 }], opp: [] } }, 5: { A: { mine: [{ name: 'Star Wideout', team: 'LA', pts: 50 }], opp: [] } } }, 5, ['A', 'B']);
+  assert.deepEqual(built.get('LA|star wideout'), [18]);       // best score that week, and only earlier weeks
+});
+
+test('a boom-prone player outranks an identical one without that history', () => {
+  const lineup = { A: { mine: [star], opp: [], score: { mine: 70, opp: 81 } } };
+  const plain = hotRoute(5, lineup, ['A'], {}, MON).forPool[0].net;
+  const hot = hotRoute(5, lineup, ['A'], {}, MON, null, new Map([['LA|star wideout', [30, 28, 31, 29]]])).forPool[0].net;
+  assert.ok(hot > plain);
+});
+
+test('if he finishes at his boom number, the swing uses the spread left without his own uncertainty', () => {
+  const r = hotRoute(5, { A: { mine: [star], opp: [], score: { mine: 70, opp: 81 } } }, ['A'], {}, MON);
+  const l = r.forPool[0].lines[0];
+  assert.ok(l.swing > 0.15 && l.swing < 0.5);                 // down 11 with one 11-point WR left: a 16-point game is a big swing
+});

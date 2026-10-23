@@ -92,6 +92,8 @@ function Row({ r, tone, board, week }) {
 }
 
 const FIVE = 5;
+// "Josh Allen" -> "J. Allen" so names fit the half-width cards.
+const shortName = n => { const w = String(n).split(' '); return w.length > 1 && !/D\/ST$/.test(n) ? w[0][0] + '. ' + w.slice(1).join(' ') : n; };
 // The points he needs to boom. If leagues score him differently, the higher number.
 const boomNeed = r => fmtPts(Math.max(...r.lines.map(l => l.boomPts)));
 
@@ -103,18 +105,15 @@ function Mini({ r, tone, board }) {
   const p = pct(r.net);
   return (
     <div className={'hr-mini ' + tone}>
-      <Avatar p={r.player} size={34} side={side} />
       <div className="hr-mini-main">
-        <div className="hr-name">{r.player.name}</div>
+        <div className="hr-mini-who"><Avatar p={r.player} size={24} side={side} /><span className="hr-name" title={r.player.name}>{shortName(r.player.name)}</span></div>
         <div className="hr-meta"><PosChip pos={r.player.pos} /><span>{r.player.team}</span>{live ? <em className="live"><i />Live</em> : <em>{when(r, board)}</em>}</div>
-      </div>
-      <div className="hr-mini-cap">win chance if he scores {boomNeed(r)} pts</div>
-      <div className="hr-mini-foot">
         <span className="hr-chips">{r.lines.map(l => (
           <span key={l.league + l.side} className={'hr-chip ' + l.side} style={{ '--lc': colorOf(l.league) }}><i />{l.league}<em>{l.side === 'mine' ? 'Yours' : 'Against'}</em></span>
         ))}</span>
-        <b className={'hr-net-n ' + (p > 0 ? 'up' : 'down')}>{sgn(p)}</b>
+        <div className="hr-mini-cap">win chance if he scores {boomNeed(r)} pts</div>
       </div>
+      <b className={'hr-net-n ' + (p > 0 ? 'up' : 'down')} title="Combined across all your leagues">{sgn(p)}</b>
     </div>
   );
 }
@@ -122,11 +121,16 @@ function Mini({ r, tone, board }) {
 // Root for and Root against, five each, side by side. Players whose games are over drop out and the next player
 // who still has a game to play takes the spot. Booming players are on the BOOM tab, not here.
 function Cheer({ hr, board, week }) {
+  const [all, setAll] = useState(false);
   const boom = new Set(hr.boom.map(r => r.key));
-  const fors = hr.forPool.filter(r => !boom.has(r.key)).slice(0, FIVE);
-  const against = hr.againstPool.filter(r => !boom.has(r.key)).slice(0, FIVE);
+  // A player who is yours in one league and against you in another is already netted into one number; he's listed on
+  // whichever side that number falls.
+  const allFor = hr.forPool.filter(r => !boom.has(r.key)), allAgainst = hr.againstPool.filter(r => !boom.has(r.key));
+  const fors = all ? allFor : allFor.slice(0, FIVE), against = all ? allAgainst : allAgainst.slice(0, FIVE);
+  const more = Math.max(allFor.length, allAgainst.length) > FIVE;
   if (!fors.length && !against.length) return null;
   return (
+    <>
     <div className="hr-cols">
       <section className="hr-col">
         <div className="hr-sec-h for"><i />Root for<span>helps you</span></div>
@@ -137,6 +141,8 @@ function Cheer({ hr, board, week }) {
         <div className="card hr-list">{against.length ? against.map(r => <Mini key={r.key} r={r} tone="against" board={board} />) : <p className="hr-none">No one left to cheer against.</p>}</div>
       </section>
     </div>
+    {more && <button className="pill-btn wide hr-expand" onClick={() => setAll(v => !v)} aria-expanded={all}>{all ? 'Show top ' + FIVE : 'Show all ' + (allFor.length + allAgainst.length) + ' players'}</button>}
+    </>
   );
 }
 
@@ -172,10 +178,10 @@ export function useProjections(week) {
   return { lookup: current ? state.lookup : null, error: current ? state.error : '', loading: !current };
 }
 
-export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, helper }) {
+export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, helper, history }) {
   const proj = useProjections(week);
   const [help, setHelp] = useState(false);
-  const hr = useMemo(() => hotRoute(week, wk, shown, board, undefined, proj.lookup), [week, wk, shown, board, proj.lookup]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const hr = useMemo(() => hotRoute(week, wk, shown, board, undefined, proj.lookup, history), [week, wk, shown, board, proj.lookup, history]);   // eslint-disable-line react-hooks/exhaustive-deps
   const allDone = hr.leagues.length > 0 && hr.leagues.every(o => o.done);
   const [view, setView] = useState('all');          // all | boom
   const gl = gamesLeft(week, board);
@@ -209,7 +215,7 @@ export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, 
           <div className="hr-ctl">
             <Segmented value={view} onChange={setView} options={[['all', 'All players'], ['boom', 'BOOM' + (hr.boom.length ? ' · ' + hr.boom.length : '')]]} />
           </div>
-          <div className="hr-legend"><span className="boom-badge">BOOM</span><span>{boomHelp} Worked out separately for each league.</span></div>
+          {view === 'boom' && <div className="hr-legend"><span className="boom-badge">BOOM</span><span>{boomHelp} Worked out separately for each league.</span></div>}
           <button className="hr-help" onClick={() => setHelp(true)}><Icon.alert size={15} sw={2.5} />How to read these numbers</button>
         </>
       )}
