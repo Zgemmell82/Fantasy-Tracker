@@ -7,7 +7,6 @@ import { Avatar, Icon, LeagueFilter, PosChip, Segmented, Sheet, useLeagueColor }
 import Radio from './Radio.jsx';
 import { RADIO_ENABLED } from './lib/features.js';
 import { fmtPts } from './lib/games.js';
-import { biggestSwings, loadSeries, record, saveSeries } from './lib/timeline.js';
 
 const pct = n => Math.round(n * 100);
 const sgn = n => (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(n) + '%';
@@ -21,40 +20,8 @@ function verdict(o) {
 const situation = diff => Math.abs(diff) < 0.5 ? 'matchup is tied' : diff > 0 ? "you're up " + Math.round(diff) : "you're down " + Math.round(-diff);
 
 // Where each league's matchup stands: score and win probability.
-const clock = t => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-
-// Win chance over the day: a line from first to latest point, with the biggest moves marked and explained.
-function Timeline({ points }) {
-  const W = 300, H = 70;
-  const t0 = points[0].t, span = Math.max(1, points[points.length - 1].t - t0);
-  const x = t => 4 + ((t - t0) / span) * (W - 8);
-  const y = wp => 4 + (1 - wp) * (H - 8);
-  const swings = biggestSwings(points);
-  return (
-    <div className="hr-tl">
-      <svg viewBox={'0 0 ' + W + ' ' + H} role="img" aria-label="Win chance over the day">
-        <line x1="0" x2={W} y1={y(0.5)} y2={y(0.5)} className="tl-mid" />
-        <polyline className="tl-line" fill="none" points={points.map(p => x(p.t).toFixed(1) + ',' + y(p.wp).toFixed(1)).join(' ')} />
-        {swings.map(w => <circle key={w.t} cx={x(w.t)} cy={y(w.wp)} r="3.5" className={w.delta > 0 ? 'tl-up' : 'tl-down'} />)}
-      </svg>
-      <div className="tl-axis"><span>{clock(t0)}</span><span>{pct(points[points.length - 1].wp)}% now</span></div>
-      {swings.length > 0 && (
-        <ul className="tl-list">
-          {swings.map(w => (
-            <li key={w.t} className={w.delta > 0 ? 'up' : 'down'}>
-              <b>{(w.delta > 0 ? '+' : '−') + Math.round(Math.abs(w.delta) * 100)}%</b>
-              <span>{clock(w.t)}{w.note ? ' · ' + w.note.n + ' (' + (w.note.who === 'mine' ? 'yours' : 'theirs') + ') +' + w.note.d + ' pts' : ''}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function Standing({ o, points }) {
+function Standing({ o }) {
   const colorOf = useLeagueColor();
-  const [open, setOpen] = useState(false);
   const lead = o.diff > 0 ? 'mine' : o.diff < 0 ? 'opp' : '';
   return (
     <div className="hr-league">
@@ -72,12 +39,6 @@ function Standing({ o, points }) {
         {o.done ? 'Everyone has played' : o.leftMine + ' of yours left · ' + o.leftOpp + ' of theirs left'}
         {o.approx && <span className="hr-approx"> · No scores yet, link this league for real odds</span>}
       </div>
-      {points && points.length > 1 && (
-        <>
-          <button className="hr-tl-btn" aria-expanded={open} onClick={() => setOpen(v => !v)}>{open ? 'Hide' : 'Show'} win chance timeline</button>
-          {open && <Timeline points={points} />}
-        </>
-      )}
     </div>
   );
 }
@@ -166,15 +127,6 @@ export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, 
   const proj = useProjections(week);
   const [help, setHelp] = useState(false);
   const hr = useMemo(() => hotRoute(week, wk, shown, board, undefined, proj.lookup), [week, wk, shown, board, proj.lookup]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const [series, setSeries] = useState(() => loadSeries(week));
-  useEffect(() => { setSeries(loadSeries(week)); }, [week]);
-  useEffect(() => {
-    setSeries(prev => {
-      const next = record(prev, hr.leagues);
-      if (next !== prev) saveSeries(week, next);
-      return next;
-    });
-  }, [hr, week]);
   const allDone = hr.leagues.length > 0 && hr.leagues.every(o => o.done);
   const [view, setView] = useState('all');          // all | boom
   const [sort, setSort] = useState('swing');         // swing | over
@@ -196,7 +148,7 @@ export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, 
       {hr.leagues.length > 0 && (
         <section className="hr-sec">
           <div className="hr-sec-h"><i />Where you stand<span>win probability right now</span></div>
-          <div className="card hr-leagues">{hr.leagues.map(o => <Standing key={o.name} o={o} points={(series[o.name] || {}).points} />)}</div>
+          <div className="card hr-leagues">{hr.leagues.map(o => <Standing key={o.name} o={o} />)}</div>
         </section>
       )}
 
