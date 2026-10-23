@@ -295,7 +295,6 @@ export function useGameFeeds(list, helper, active) {
 const SHOW_STEP = 40;
 
 function AllLive({ games, board, helper, scored }) {
-  const [scope, setScope] = useState('live');          // live | week
   const [impact, setImpact] = useState('all');          // all (every play, yours highlighted) | mine (only plays that touch your teams) | scoring
   const [limit, setLimit] = useState(SHOW_STEP);
   // Every NFL game on the scoreboard, not just the ones with your players; games without any get no tracked players.
@@ -305,7 +304,7 @@ function AllLive({ games, board, helper, scored }) {
   }), [games, board]);
   const started = everyGame.filter(x => x.info.state !== 'pre');
   const liveList = started.filter(x => x.info.state === 'in');
-  const list = scope === 'live' ? liveList : started;
+  const list = started;                                // every game of the week that has kicked off, live or finished
   const feeds = useGameFeeds(list, helper, list.length > 0);
   const startedAt = useRef(Date.now());
   const rules = useContext(RulesContext);
@@ -327,29 +326,23 @@ function AllLive({ games, board, helper, scored }) {
     });
     return out.sort((a, b) => (b.seen - a.seen) || (b.p.period - a.p.period) || (clockSecs(a.p.clock) - clockSecs(b.p.clock)) || (b.p.seq - a.p.seq));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feeds.byId, impact, scope, board, rules]);
+  }, [feeds.byId, impact, board, rules]);
 
   return (
     <div className="stack">
       <div className="feed all-live">
         <div className="feed-bar">
-          <Segmented value={scope} onChange={v => { setScope(v); setLimit(SHOW_STEP); }}
-            options={[['live', 'Live now' + (liveList.length ? ' · ' + liveList.length : '')], ['week', 'All games this week']]} />
           <Segmented value={impact} onChange={v => { setImpact(v); setLimit(SHOW_STEP); }}
             options={[['all', 'All'], ['mine', 'For/Against'], ['scoring', 'Scoring']]} />
           <div className="feed-meta">
             {liveList.length > 0 && <i className="dot-live" />}
-            {list.length} {scope === 'live' ? 'live' : 'started'} {list.length === 1 ? 'game' : 'games'}{liveList.length ? ' · updates every 20s' : ''}
+            {list.length} {list.length === 1 ? 'game' : 'games'} this week{liveList.length ? ' · ' + liveList.length + ' live, updates every 20s' : ''}
             {feeds.at ? ' · ' + new Date(feeds.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''}
           </div>
         </div>
         {feeds.error && <div className="banner err"><Icon.alert size={16} sw={2.5} /><span>{feeds.error}</span></div>}
         {!list.length && (
-          <div className="feed-empty">
-            {scope === 'live' && started.length
-              ? <span>No games are live right now. <button className="text-btn" onClick={() => setScope('week')}>Show all games this week</button></span>
-              : 'Nothing to show yet. Plays appear once games kick off.'}
-          </div>
+          <div className="feed-empty">Nothing to show yet. Plays appear once games kick off.</div>
         )}
         {list.length > 0 && !feeds.loaded && !feeds.error && <div className="feed-empty">Loading plays…</div>}
         {feeds.loaded && list.length > 0 && !items.length && !feeds.error && (
