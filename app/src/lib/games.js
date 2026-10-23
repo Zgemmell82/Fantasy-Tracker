@@ -1,4 +1,5 @@
 import { SCHEDULE_ALL } from '../data.js';
+import { playerKey } from './identity.js';
 
 // Groups every league's starters by the NFL game they play in that week.
 // Returns games in schedule order, plus a "bye" bucket for teams with no game.
@@ -11,8 +12,12 @@ export function groupByGame(week, weekData, now = Date.now(), names = Object.key
   const bye = { f: {}, a: {} };
   const put = (side, p, lg) => {
     const b = idx[p.team] === undefined ? bye : buckets[idx[p.team]];
-    const key = p.team + '|' + p.name.toLowerCase();
+    const key = playerKey(p.name, p.team);
     if (!b[side][key]) b[side][key] = { name: p.name, pos: p.pos, team: p.team, sid: p.sid, eid: p.eid, leagues: [], uid: side + ':' + key };
+    const rec = b[side][key];                                           // the same person from another league or site
+    if (!rec.sid && p.sid) rec.sid = p.sid;
+    if (!rec.eid && p.eid) rec.eid = p.eid;
+    if (p.name.length > rec.name.length) rec.name = p.name;           // keep the fuller spelling ("Luther Burden III")
     if (!b[side][key].leagues.includes(lg)) b[side][key].leagues.push(lg);
     if (typeof p.pts === 'number') (b[side][key].pts = b[side][key].pts || {})[lg] = p.pts;
   };

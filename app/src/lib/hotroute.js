@@ -14,6 +14,7 @@ import { projectionFor } from './projections.js';
 import { gameState } from './remaining.js';
 import { boardFor } from './pbp.js';
 import { normTeam } from './teams.js';
+import { playerKey } from './identity.js';
 
 // Average points and spread for one starter's whole game, by position (half-PPR-ish).
 const MEAN = { QB: 18, RB: 11, WR: 11, TE: 7.5, K: 8, DEF: 7, IDP: 6 };
@@ -104,7 +105,7 @@ export function hotRoute(week, wk, leagues, board, now = Date.now(), lookup = nu
   const outlooks = leagues.map(name => ({ name, ...leagueOutlook(week, wk[name], board, now, lookup) }));
   const byPlayer = new Map();
   outlooks.forEach(o => [...o.mine, ...o.opp].forEach(x => {
-    const key = normTeam(x.p.team) + '|' + String(x.p.name).toLowerCase();
+    const key = playerKey(x.p.name, x.p.team);
     if (!byPlayer.has(key)) byPlayer.set(key, { key, player: x.p, f: x.f, game: x.game, net: 0, lines: [] });
     const r = byPlayer.get(key);
     r.projected = r.projected || x.projected;

@@ -3,6 +3,7 @@
 import { gameFor, gameState } from './remaining.js';
 import { injuryFor } from './injuries.js';
 import { normTeam } from './teams.js';
+import { playerKey } from './identity.js';
 
 const SEVERITY = { bye: 4, out: 3, doubtful: 2, questionable: 1 };
 const LABEL = { bye: 'Bye', out: 'Out', doubtful: 'Doubtful', questionable: 'Questionable' };
@@ -12,7 +13,7 @@ const kick = g => {
   return t.trim();
 };
 
-export const alertKey = (side, p) => side + ':' + normTeam(p.team) + '|' + String(p.name).toLowerCase();
+export const alertKey = (side, p) => side + ':' + playerKey(p.name, p.team);
 
 // Returns one entry per player (a player in several leagues is one entry with several leagues), worst first,
 // your own starters before your opponents'. Games that have started (or finished) are skipped.

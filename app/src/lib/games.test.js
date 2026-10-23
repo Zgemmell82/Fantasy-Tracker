@@ -48,3 +48,18 @@ test('ESPN starters skip bench and IR and name defenses', () => {
     { n: 'Steelers D/ST', p: 'DEF', t: 'PIT' }
   ]);
 });
+
+import { nameId, playerKey } from './identity.js';
+test('the same player spelled differently across sites is one record', () => {
+  assert.equal(nameId('Luther Burden III'), nameId('Luther Burden'));
+  assert.equal(nameId('D.J. Moore'), nameId('DJ Moore'));
+  assert.equal(nameId('Marvin Harrison Jr.'), nameId('Marvin Harrison'));
+  assert.equal(nameId('Jaxon Smith-Njigba'), nameId('Jaxon Smith-Njigba'));
+  assert.equal(playerKey('Puka Nacua', 'LAR'), playerKey('Puka Nacua', 'LA'));
+  assert.notEqual(playerKey('Josh Allen', 'BUF'), playerKey('Josh Allen', 'JAX'));
+  const wk = { ESPN: { mine: [{ name: 'Luther Burden III', pos: 'WR', team: 'CHI', eid: 7 }], opp: [] }, Sleeper: { mine: [{ name: 'Luther Burden', pos: 'WR', team: 'CHI', sid: '99' }], opp: [] } };
+  const { games } = groupByGame(5, wk, 0, ['ESPN', 'Sleeper']);
+  const all = games.flatMap(g => g.mine);
+  assert.equal(all.length, 1);
+  assert.deepEqual([all[0].name, all[0].sid, all[0].eid, all[0].leagues], ['Luther Burden III', '99', 7, ['ESPN', 'Sleeper']]);
+});
