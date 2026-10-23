@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { leagueOutlook } from './lib/hotroute.js';
 import { leagueGlance } from './lib/home.js';
-import { positionRank } from './lib/lineup.js';
+import { alignByPosition } from './lib/lineup.js';
 import { fmtPts } from './lib/games.js';
 import { MatchCell } from './MatchCell.jsx';
 import { useProjections } from './HotRoute.jsx';
@@ -9,14 +9,9 @@ import { Icon, useLeagueColor } from './ui.jsx';
 
 const proj1 = n => (Math.round(n * 10) / 10).toFixed(1);
 
-// Starters in the order the Leagues matchup shows them for sources that report slots by position.
-const ordered = (list, how) => (how === 'espn' || how === 'mfl' || how === 'yahoo')
-  ? list.map((p, i) => [p, i]).sort((a, b) => positionRank(a[0].pos) - positionRank(b[0].pos) || a[1] - b[1]).map(x => x[0])
-  : list;
-
 // Every league's matchup at a glance: one summary strip, then a collapsible section per league with your starters,
 // their live scores and projected finishes, and your total against your opponent's.
-export default function LeagueBoard({ week, wk, names, board, onMatchup, synced = {} }) {
+export default function LeagueBoard({ week, wk, names, board, synced = {} }) {
   const colorOf = useLeagueColor();
   const proj = useProjections(week);
   const [shut, setShut] = useState([]);                        // leagues folded away
@@ -66,8 +61,7 @@ export default function LeagueBoard({ week, wk, names, board, onMatchup, synced 
                   <div className="hb-vs">vs</div>
                   <div className="hb-side opp"><span>Opponent</span><b>{o.approx ? '—' : fmtPts(o.them)}</b><em>{g.themProj != null ? 'projected ' + proj1(g.themProj) : ''}</em></div>
                 </div>
-                <Starters list={l.mine} how={l.how} o={o} week={week} board={board} />
-                <button className="hb-more" onClick={() => onMatchup(name)}>Full matchup with {l.opp.length} opponent starters<Icon.chevron size={14} sw={2.5} /></button>
+                <Matchup l={l} o={o} week={week} board={board} />
               </>
             ))}
           </section>
@@ -90,12 +84,26 @@ function SyncNote({ s, at }) {
     : <div className="hb-updated">Points updated {when}</div>;
 }
 
-function Starters({ list, how, o, week, board }) {
+// Both lineups side by side, lined up by position (same layout as the full matchup sheet), with live and projected points.
+function Matchup({ l, o, week, board }) {
   const finish = useMemo(() => {
     const m = new Map();
-    o.mine.forEach(x => m.set(x.p, { total: (typeof x.p.pts === 'number' ? x.p.pts : 0) + x.mean, left: x.f > 0, real: x.projected }));
+    [...o.mine, ...o.opp].forEach(x => m.set(x.p, { total: (typeof x.p.pts === 'number' ? x.p.pts : 0) + x.mean, left: x.f > 0, real: x.projected }));
     return m;
   }, [o]);
-  if (!list.length) return <p className="hb-empty">No starters yet.</p>;
-  return <div className="hb-list">{ordered(list, how).map((p, i) => <MatchCell key={p.uid || p.name + i} p={p} side="mine" week={week} board={board} fin={finish.get(p)} />)}</div>;
+  const byPosition = l.how === 'espn' || l.how === 'mfl' || l.how === 'yahoo';
+  const rows = byPosition ? alignByPosition(l.mine, l.opp)
+    : Array.from({ length: Math.max(l.mine.length, l.opp.length) }, (_, i) => [l.mine[i], l.opp[i]]);
+  if (!rows.length) return <p className="hb-empty">No starters yet.</p>;
+  return (
+    <div className="mu-grid hb-grid">
+      {rows.map(([a, b, flex], i) => (
+        <div className={'mu-row' + (flex ? ' flx' : '')} key={i}>
+          {flex && <div className="mu-flx">FLX</div>}
+          <MatchCell p={a} side="mine" week={week} board={board} fin={finish.get(a)} />
+          <MatchCell p={b} side="opp" week={week} board={board} fin={finish.get(b)} />
+        </div>
+      ))}
+    </div>
+  );
 }
