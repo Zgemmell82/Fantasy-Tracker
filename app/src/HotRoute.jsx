@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BOOM_MIN_GAIN, BOOM_RATIO, hotRoute } from './lib/hotroute.js';
-import { showWinPath, winPaths } from './lib/winpath.js';
+import { gamesLeft, OPENS_AT, pathsFor } from './lib/pathfacts.js';
 import { loadProjections } from './lib/projections.js';
 import { gameState } from './lib/remaining.js';
 import { Avatar, Icon, LeagueFilter, PosChip, Segmented, Sheet, useLeagueColor } from './ui.jsx';
@@ -129,7 +129,20 @@ export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, 
   const hr = useMemo(() => hotRoute(week, wk, shown, board, undefined, proj.lookup), [week, wk, shown, board, proj.lookup]);   // eslint-disable-line react-hooks/exhaustive-deps
   const allDone = hr.leagues.length > 0 && hr.leagues.every(o => o.done);
   const [view, setView] = useState('all');          // all | boom
+  const gl = gamesLeft(week, board);
   const [sort, setSort] = useState('swing');         // swing | over
+
+  if (!gl.open) {
+    return (
+      <div className="stack">
+        <div className="card empty">
+          <Icon.route size={28} />
+          <div className="empty-t">The Two-Minute Drill opens when {OPENS_AT} games are left</div>
+          <div className="empty-d">{gl.started ? gl.left + ' of ' + gl.total + ' games are still to play this week. ' : 'Week ' + week + ' hasn\'t started yet. '}Then each league gets a direct path to victory: who is left on each side and the margin that decides it.</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="stack">
@@ -145,14 +158,14 @@ export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, 
         </div>
       )}
 
+      {hr.leagues.length > 0 && <PathToVictory outlooks={hr.leagues} />}
+
       {hr.leagues.length > 0 && (
         <section className="hr-sec">
           <div className="hr-sec-h"><i />Where you stand<span>win probability right now</span></div>
           <div className="card hr-leagues">{hr.leagues.map(o => <Standing key={o.name} o={o} />)}</div>
         </section>
       )}
-
-      {hr.leagues.length > 0 && showWinPath(week, board) && <WinPath outlooks={hr.leagues} />}
 
       {(hr.rootFor.length > 0 || hr.rootAgainst.length > 0 || hr.wash.length > 0 || hr.boom.length > 0) && (
         <>
@@ -201,47 +214,48 @@ export default function HotRoute({ week, wk, leagues, shown, sel, onSel, board, 
   );
 }
 
-// What each league needs to finish in front: the gap, who can close it, and how likely it is.
-const STATUS = { win: 'Win', bubble: 'On the bubble', miracle: 'Need a miracle' };
-function WinPath({ outlooks }) {
+// The direct path to victory in each league: the score now, who is left on each side, and the margin that decides it.
+// Facts only: no projections.
+const PSTATE = { won: 'Locked win', lost: 'Locked loss', final: 'Final', open: 'Still open' };
+const kickoff = g => g ? (((/^(\w{3})/.exec(g.d) || [])[1] || '') + ' ' + ((/(\d+:\d+) ([AP])M/.exec(g.d) || []).slice(1).join('').toLowerCase())).trim() : '';
+
+function Left({ title, tone, list }) {
+  return (
+    <div className={'pv-left ' + tone}>
+      <span className="pv-left-h">{title}</span>
+      {list.length === 0 && <span className="pv-none">No one left</span>}
+      {list.map(p => (
+        <span className="pv-p" key={p.name}>
+          <b>{p.name}</b>
+          <em>{p.live ? <i className="pv-live"><i />Live</i> : kickoff(p.game)}{p.pts != null ? ' · ' + fmtPts(p.pts) + ' so far' : ''}</em>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function PathToVictory({ outlooks }) {
   const colorOf = useLeagueColor();
-  const [how, setHow] = useState(false);
-  const [open, setOpen] = useState(false);                   // folded away until asked for
-  const paths = useMemo(() => winPaths(outlooks), [outlooks]);
+  const paths = useMemo(() => pathsFor(outlooks), [outlooks]);
   if (!paths.length) return null;
-  const live = paths.filter(w => !w.locked), locked = paths.filter(w => w.locked);
   return (
     <section className="hr-sec">
-      <button className="hr-sec-h wp-toggle" onClick={() => setOpen(v => !v)} aria-expanded={open}>
-        <i />What I need to win<span>{open ? 'late games and primetime' : paths.filter(w => !w.locked).length + ' undecided · tap to open'}</span>
-        <em className={'chev' + (open ? ' open' : '')} aria-hidden="true"><Icon.chevron size={16} sw={2.5} /></em>
-      </button>
-      {open && <div className="card wp">
-        {live.map(w => (
-          <div className="wp-row" key={w.name}>
+      <div className="hr-sec-h"><i />Path to victory<span>from the score and who has left to play</span></div>
+      <div className="card pv">
+        {paths.map(w => (
+          <div className={'pv-row ' + w.state} key={w.name}>
             <div className="wp-head">
               <span className="ltag" style={{ '--lc': colorOf(w.name) }}>{w.name}</span>
-              <span className={'wp-status ' + w.status}>{STATUS[w.status]} · {Math.round(w.wp * 100)}%</span>
+              <span className={'pv-badge ' + w.state}>{PSTATE[w.state]}</span>
             </div>
-            <div className="wp-scores"><span className="mint"><em>You</em><b>{fmtPts(w.me)}</b></span><span className="wp-need">{w.need > 0 ? 'need ' + fmtPts(w.need) + ' more' : 'ahead of their finish'}</span><span className="coral"><b>{fmtPts(w.them)}</b><em>Them</em></span></div>
-            <p className="wp-line">{w.line}</p>
-            <div className="wp-foot">{w.mineLeft} of yours left (proj {fmtPts(w.mineRem)}) · {w.oppLeft} of theirs left (proj {fmtPts(w.oppRem)}){w.oppPlayers.length ? ': ' + w.oppPlayers.map(p => p.name.split(' ').slice(-1)[0]).join(', ') : ''}</div>
+            <div className="wp-scores"><span className="mint"><em>You</em><b>{fmtPts(w.me)}</b></span><span className="wp-need">{w.gap > 0 ? 'trailing by ' + fmtPts(w.gap) : w.gap < 0 ? 'leading by ' + fmtPts(-w.gap) : 'tied'}</span><span className="coral"><b>{fmtPts(w.them)}</b><em>Them</em></span></div>
+            <p className="pv-line">{w.headline}</p>
+            {w.state !== 'final' && (
+              <div className="pv-lists"><Left title="Yours left" tone="mine" list={w.mine} /><Left title="Theirs left" tone="opp" list={w.opp} /></div>
+            )}
           </div>
         ))}
-        {locked.map(w => (
-          <div className="wp-row locked" key={w.name}>
-            <div className="wp-head">
-              <span className="ltag" style={{ '--lc': colorOf(w.name) }}>{w.name}</span>
-              <span className={'wp-status ' + (w.lockedWin ? 'win' : 'miracle')}>{w.lockedWin ? 'Locked win' : 'Locked loss'}</span>
-            </div>
-            <div className="wp-foot">{fmtPts(w.me)} to {fmtPts(w.them)}. {w.line}</div>
-          </div>
-        ))}
-        <button className="hr-tl-btn" onClick={() => setHow(v => !v)} aria-expanded={how}>{how ? 'Hide' : 'How is this worked out?'}</button>
-        {how && (
-          <p className="hint">Needed points = their score + what their unfinished players are projected to add − your score. Your best remaining players are added up (by what's left of their Sleeper projection, scaled by the clock) until they cover it. Win chance compares both sides' expected finishes against how much the remaining games can swing it. Win is 70% or better, a miracle is 15% or less, and a league is locked at 99% or once everyone has played.</p>
-        )}
-      </div>}
+      </div>
     </section>
   );
 }
