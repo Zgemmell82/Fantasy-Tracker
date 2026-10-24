@@ -93,8 +93,6 @@ function Row({ r, tone, board, week }) {
 }
 
 const FIVE = 5;
-// "Josh Allen" -> "J. Allen" so names fit the half-width cards.
-const shortName = n => { const w = String(n).split(' '); return w.length > 1 && !/D\/ST$/.test(n) ? w[0][0] + '. ' + w.slice(1).join(' ') : n; };
 // The points he needs to boom. If leagues score him differently, the higher number.
 const boomNeed = r => fmtPts(Math.max(...r.lines.map(l => l.boomPts)));
 
@@ -106,8 +104,9 @@ function Mini({ r, tone, board }) {
   const p = pct(r.net);
   return (
     <div className={'hr-mini ' + tone}>
+      <div className="hr-mini-who"><Avatar p={r.player} size={24} side={side} /><span className="hr-name">{r.player.name}</span></div>
+      <div className="hr-mini-body">
       <div className="hr-mini-main">
-        <div className="hr-mini-who"><Avatar p={r.player} size={20} side={side} /><span className="hr-name" title={r.player.name}>{shortName(r.player.name)}</span></div>
         <div className="hr-meta"><PosChip pos={r.player.pos} /><span>{r.player.team}</span>{live ? <em className="live"><i />Live</em> : <em>{when(r, board)}</em>}</div>
         <span className="hr-chips">{r.lines.map(l => (
           <span key={l.league + l.side} className={'hr-chip ' + l.side} style={{ '--lc': colorOf(l.league) }}><i />{l.league}<em>{l.side === 'mine' ? 'Yours' : 'Against'}</em></span>
@@ -116,6 +115,7 @@ function Mini({ r, tone, board }) {
       <div className="hr-mini-right" title="Combined across all your leagues">
         <b className={'hr-net-n ' + (p > 0 ? 'up' : 'down')}>{sgn(p)}</b>
         <span className="hr-mini-cap">win chance if he scores {boomNeed(r)} pts</span>
+      </div>
       </div>
     </div>
   );

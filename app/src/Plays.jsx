@@ -81,10 +81,7 @@ export const trackedFor = g => [
   ...g.theirs.map(p => ({ ...p, side: 'opp' }))
 ];
 
-const short = name => {
-  const parts = String(name).split(' ');
-  return parts.length > 1 && !/D\/ST$/.test(name) ? parts[0][0] + '. ' + parts.slice(1).join(' ') : name;
-};
+const short = name => String(name);          // full names: nothing abbreviated or cut off
 const qLabel = n => n > 4 ? (n === 5 ? 'OT' : n - 4 + 'OT') : 'Q' + n;
 const qTitle = n => n > 4 ? 'Overtime' : ['1st', '2nd', '3rd', '4th'][n - 1] + ' quarter';
 
