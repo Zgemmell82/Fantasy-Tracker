@@ -252,41 +252,54 @@ export function GameStatus({ game, info }) {
 
 const clockSecs = c => { const m = /^(\d+):(\d+)/.exec(c || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : 0; };
 
-// Several games' plays at once, refreshed every 20s while any of them is live. Plays are ordered newest first: ones that arrived while
+// Several games' plays at once. Live games refresh every 20s; finished games are fetched once. Each game's plays show up as
+// soon as that game's request comes back, so one slow or failing game never holds the others up, and a game that
+// can't be loaded is reported (errors) instead of silently missing. Plays are ordered newest first: ones that arrived while
 // the screen was open first, then by quarter and clock (the best ordering across games the data allows).
 export function useGameFeeds(list, helper, active) {
   const key = list.map(x => x.info.id).join(',');
   const anyLive = list.some(x => x.info.state === 'in');
-  const [state, setState] = useState({ byId: {}, at: 0, error: '', loaded: false });
+  const [state, setState] = useState({ byId: {}, errors: {}, at: 0, loaded: false });
   const seen = useRef(new Map());   // play id -> when this screen first saw it (0 = there from the start)
   const first = useRef(true);
+  const finished = useRef(new Set());   // games fetched after they ended: nothing more will change
+  const inflight = useRef(new Set());
+  const states = useRef({});
+  states.current = Object.fromEntries(list.map(x => [x.info.id, x.info.state]));
   useEffect(() => {
     if (!active || !key) return;
     let stop = false, timer = 0;
-    const ids = key.split(',');
-    const load = async () => {
-      const res = await Promise.allSettled(ids.map(id => fetchPlays(id, helper)));
-      if (stop) return;
-      const now = Date.now();
-      const byId = {};
-      res.forEach((r, i) => {
-        if (r.status !== 'fulfilled') return;
-        byId[ids[i]] = r.value;
-        r.value.plays.forEach(p => { if (!seen.current.has(ids[i] + ':' + p.id)) seen.current.set(ids[i] + ':' + p.id, first.current ? 0 : now); });
-      });
-      first.current = false;
-      const failed = res.filter(r => r.status === 'rejected');
-      setState(prev => ({
-        byId: Object.keys(byId).length ? { ...prev.byId, ...byId } : prev.byId, at: now, loaded: true,
-        error: failed.length === res.length ? failed[0].reason.message : ''
-      }));
-      if (anyLive) timer = setTimeout(tick, 20000);
+    // Live games first, then upcoming, then finished.
+    const ids = key.split(',').sort((a, b) => ({ in: 0, pre: 1, post: 2 }[states.current[a]] ?? 1) - ({ in: 0, pre: 1, post: 2 }[states.current[b]] ?? 1));
+    const one = async id => {
+      if (finished.current.has(id) || inflight.current.has(id)) return;
+      inflight.current.add(id);
+      const wasFinal = states.current[id] === 'post';
+      try {
+        const r = await fetchPlays(id, helper);
+        if (stop) return;
+        const now = Date.now();
+        r.plays.forEach(p => { if (!seen.current.has(id + ':' + p.id)) seen.current.set(id + ':' + p.id, first.current ? 0 : now); });
+        if (wasFinal) finished.current.add(id);
+        setState(prev => { const errors = { ...prev.errors }; delete errors[id]; return { ...prev, byId: { ...prev.byId, [id]: r }, errors, at: now }; });
+      } catch (e) {
+        if (!stop) setState(prev => ({ ...prev, errors: { ...prev.errors, [id]: e.message } }));
+      } finally { inflight.current.delete(id); }
     };
-    const tick = () => { if (visible()) load(); else timer = setTimeout(tick, 20000); };
+    const load = async () => {
+      await Promise.all(ids.map(one));
+      if (stop) return;
+      first.current = false;
+      setState(prev => ({ ...prev, loaded: true }));
+    };
+    // The next refresh is scheduled up front so a hung request can't stall it.
+    const tick = () => { if (stop) return; if (visible()) load(); if (anyLive) timer = setTimeout(tick, 20000); };
     load();
+    if (anyLive) timer = setTimeout(tick, 20000);
     return () => { stop = true; clearTimeout(timer); };
   }, [key, anyLive, helper, active]);
-  return { ...state, seenAt: (gid, pid) => seen.current.get(gid + ':' + pid) || 0 };
+  const failed = Object.values(state.errors);
+  return { ...state, error: failed.length && failed.length >= list.length ? failed[0] : '', failedCount: failed.length, seenAt: (gid, pid) => seen.current.get(gid + ':' + pid) || 0 };
 }
 
 const SHOW_STEP = 40;
@@ -344,6 +357,10 @@ function AllLive({ games, board, helper, scored }) {
           </div>
         </div>
         {feeds.error && <div className="banner err"><Icon.alert size={16} sw={2.5} /><span>{feeds.error}</span></div>}
+        {!feeds.error && feeds.failedCount > 0 && <div className="banner err"><Icon.alert size={16} sw={2.5} /><span>Couldn't load plays for {feeds.failedCount} {feeds.failedCount === 1 ? 'game' : 'games'}, so they're missing below. Retrying every 20 seconds while games are live.</span></div>}
+        {liveList.filter(x => feeds.byId[x.info.id] && !feeds.byId[x.info.id].plays.length).map(x => (
+          <div className="feed-empty" key={x.info.id}>ESPN hasn't published any plays yet for {x.info.away} @ {x.info.home} (ESPN game {x.info.id}). They show up here as soon as it does.</div>
+        ))}
         {!list.length && (
           <div className="feed-empty">Nothing to show yet. Plays appear once games kick off.</div>
         )}

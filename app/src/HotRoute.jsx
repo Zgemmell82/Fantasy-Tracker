@@ -79,12 +79,15 @@ function Row({ r, tone, board, week }) {
                 <span className={'hr-role ' + l.side}>{l.side === 'mine' ? 'Yours' : 'Against'}</span>
                 <b className={'hr-over ' + (good || 'none')}>{o == null ? '—' : sgn(o)}</b>
                 <span className="hr-pts">{l.pts == null || !l.started ? '—' : fmtPts(l.pts)}<i> (proj: {l.proj == null ? '—' : fmtPts(Math.round(l.proj * 10) / 10)})</i></span>
-                <span className="hr-sit">{l.done ? 'final' : situation(l.diff)}</span>
+                <span className="hr-sit">{l.done ? 'final' : situation(l.diff)}{tone === 'wash' && !l.done && pct(l.swing) !== 0 ? ' · ' + sgn(pct(l.swing)) + ' if he scores ' + fmtPts(l.boomPts) : ''}</span>
               </div>
             );
           })}
         </div>
       </div>
+      {tone === 'wash' && (
+        <div className="hr-net"><b>{sgn(pct(r.net))}</b><span>net across<br />your leagues</span></div>
+      )}
       {tone !== 'wash' && tone !== 'boom' && (
         <div className="hr-net"><b>{sgn(pct(r.net))}</b><span>your win chance<br />if he scores {boomNeed(r)} pts</span></div>
       )}

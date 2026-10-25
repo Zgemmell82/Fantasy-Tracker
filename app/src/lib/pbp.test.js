@@ -99,3 +99,15 @@ test('reads plays from a flat plays list when a live summary has no drives', () 
   assert.equal(r.plays[0].offense, 'PHI');
   assert.equal(r.home, 'JAX');
 });
+
+import { yardsOf, estimate as est2 } from './pbp.js';
+test('rushing yards count even when ESPN\'s yardage field reads zero or the text says "loss of"', () => {
+  const play = (text, yards = null) => ({ text, yards, offense: 'PIT', scoredBy: '' });
+  assert.equal(yardsOf(play('J.Warren left end to PIT 30 for 5 yards (T.Smith).', 0)), 5);        // field says 0 on a live play
+  assert.equal(yardsOf(play('J.Warren up the middle to PIT 22 for a loss of 3 yards (D.Lloyd).')), -3);
+  assert.equal(yardsOf(play('J.Warren right guard for no gain (X.Smith).', 0)), 0);
+  assert.equal(yardsOf(play('J.Warren rush for 6 yards', 6)), 6);
+  const re = nameRe('Jaylen Warren');
+  assert.equal(est2(play('J.Warren left end to PIT 30 for 5 yards (T.Smith).', 0), re, 'rusher'), 0.5);
+  assert.equal(est2(play('J.Warren up the middle to PIT 22 for a loss of 3 yards (D.Lloyd).'), re, 'rusher'), -0.3);
+});

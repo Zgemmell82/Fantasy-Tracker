@@ -170,11 +170,23 @@ export function nameRe(full) {
 
 const DEF_KEYWORDS = /sack|intercept|fumble recovery \(opponent\)|safety|blocked|return touchdown/i;
 
+// The yards a play gained, as far as the play text and ESPN's yardage field agree. ESPN's field can read 0 on a live
+// play whose text says "for 5 yards", and "for a loss of 3 yards" isn't a negative number in the text, so a zero
+// field gives way to what the text says.
+export function yardsOf(play) {
+  const t = play.text || '';
+  const loss = t.match(/for a loss of (\d+) yards?/i);
+  const gain = t.match(/for (-?\d+) yards?/i);
+  const fromText = loss ? -Number(loss[1]) : gain ? Number(gain[1]) : /for no gain/i.test(t) ? 0 : null;
+  if (typeof play.yards === 'number' && play.yards !== 0) return play.yards;
+  return fromText != null ? fromText : (typeof play.yards === 'number' ? play.yards : 0);
+}
+
 // Estimate of what this play was worth to one player, in the given league scoring (half-PPR defaults).
 export function estimate(play, re, role, rules = DEFAULT_RULES) {
   const t = play.text;
   if (/no play/i.test(t) && /penalty/i.test(t)) return 0;
-  const yards = play.yards != null ? play.yards : (() => { const m = t.match(/for (-?\d+) yards?/); return m ? Number(m[1]) : /for no gain/.test(t) ? 0 : 0; })();
+  const yards = yardsOf(play);
   const td = /TOUCHDOWN/i.test(t) && (!play.scoredBy || play.scoredBy === play.offense);
   let pts = 0;
   if (role === 'passer') {
@@ -210,7 +222,7 @@ export function idpPoints(play, re, rules = IDP_RULES) {
   const forced = new RegExp('FUMBLES[^.]*?\\(([^)]*)\\)').exec(t);
   const isForcer = !!(forced && here.test(forced[1]));
   const sack = /\bsacked\b/i.test(t);
-  const lost = (() => { const m = t.match(/for (-?\d+) yards?/); return play.yards != null ? play.yards < 0 : !!m && Number(m[1]) < 0; })();
+  const lost = yardsOf(play) < 0;
   groups.forEach(g => {
     if (isForcer && forced[1] === g) return;                       // that group is the forced-fumble credit, handled below
     const names = g.split(/[;,]/).map(x => x.trim()).filter(Boolean);
