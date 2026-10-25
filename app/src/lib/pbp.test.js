@@ -128,3 +128,10 @@ test('plays carry their wall-clock time so they can be ordered across games', ()
     drives: { previous: [{ plays: [{ id: '1', sequenceNumber: '1', text: 'x', period: { number: 1 }, clock: { displayValue: '15:00' }, wallclock: '2026-10-25T17:02:03Z' }] }] } };
   assert.equal(parsePlays(sum).plays[0].at, Date.parse('2026-10-25T17:02:03Z'));
 });
+
+import { kickoffOf } from './pbp.js';
+test('kickoff times come from the schedule, so the feed can keep games in game order', () => {
+  assert.ok(kickoffOf(5, 'BUF@LA') > kickoffOf(5, 'NYG@WAS'));       // Monday night after Sunday
+  assert.equal(kickoffOf(5, 'LA@BUF'), kickoffOf(5, 'BUF@LA'));       // home and away swapped on the scoreboard
+  assert.equal(kickoffOf(5, 'XXX@YYY'), 0);
+});

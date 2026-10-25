@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { boardFor, fetchPlays, fetchScoreboard, matchPlays, nextPollMs } from './lib/pbp.js';
+import { boardFor, fetchPlays, fetchScoreboard, kickoffOf, matchPlays, nextPollMs } from './lib/pbp.js';
 import { fmtPts } from './lib/games.js';
 import { buildRecap } from './lib/recap.js';
 import { effectOf, relevantPlay } from './lib/relevance.js';
@@ -304,7 +304,7 @@ export function useGameFeeds(list, helper, active) {
 
 const SHOW_STEP = 40;
 
-function AllLive({ games, board, helper, scored }) {
+function AllLive({ games, board, helper, scored, week }) {
   const [impact, setImpact] = useState('all');          // all (every play, yours highlighted) | mine (only plays that touch your teams) | scoring
   const [limit, setLimit] = useState(SHOW_STEP);
   const [allScoring, setAllScoring] = useState(false);    // Scoring tab: every scoring play, or only those that touch your teams
@@ -331,11 +331,12 @@ function AllLive({ games, board, helper, scored }) {
         const rel = relevantPlay(m);
         if (impact === 'scoring' ? !m.scoring || (!allScoring && !rel) : impact !== 'all' && !rel) return;
         const p = rel ? { ...rel, relevant: true } : { ...m, hits: [] };
-        out.push({ p, game: { away: f.away || info.away, home: f.home || info.home }, gid: info.id, live: info.state === 'in', seen: feeds.seenAt(info.id, p.id) });
+        out.push({ p, game: { away: f.away || info.away, home: f.home || info.home }, gid: info.id, kick: kickoffOf(week, g.key), seen: feeds.seenAt(info.id, p.id) });
       });
     });
-    const rank = x => (x.live ? 0 : 1);
-    return out.sort((a, b) => (b.seen - a.seen) || ((b.p.at || 0) - (a.p.at || 0)) || (rank(a) - rank(b)) || (b.p.period - a.p.period) || (clockSecs(a.p.clock) - clockSecs(b.p.clock)) || (b.p.seq - a.p.seq));
+    // Game order, not clock order: the most recent game (by kickoff) first, and inside each game the newest play first.
+    // So Sunday's games sit above Thursday's instead of being interleaved by what the game clock said.
+    return out.sort((a, b) => (b.kick - a.kick) || a.gid.localeCompare(b.gid) || (b.p.seq - a.p.seq) || (b.p.period - a.p.period) || (clockSecs(a.p.clock) - clockSecs(b.p.clock)));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feeds.byId, impact, allScoring, board, rules]);
 
@@ -414,7 +415,7 @@ function GamePlayers({ game }) {
 
 const ORDER = { in: 0, pre: 1, post: 2 };
 
-export function PlaysScreen({ games, board, boardError, helper, scored, leagues, sel, onSel }) {
+export function PlaysScreen({ games, board, boardError, helper, scored, leagues, sel, onSel, week }) {
   const [open, setOpen] = useState([]);                 // game keys that are expanded
   const [view, setView] = useState('games');
   const toggle = k => setOpen(o => o.includes(k) ? o.filter(x => x !== k) : [...o, k]);
@@ -439,7 +440,7 @@ export function PlaysScreen({ games, board, boardError, helper, scored, leagues,
         </div>
       )}
       {boardError && <div className="banner err"><Icon.alert size={16} sw={2.5} /><span>{boardError} Scores and plays will show once ESPN is reachable.</span></div>}
-      {view === 'all' && <AllLive games={games} board={board} helper={helper} scored={scored} leagues={leagues} />}
+      {view === 'all' && <AllLive games={games} board={board} helper={helper} scored={scored} leagues={leagues} week={week} />}
       {view === 'games' && list.map(({ g, info }) => {
         const isOpen = open.includes(g.key);
         return (

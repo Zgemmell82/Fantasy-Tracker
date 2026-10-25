@@ -65,6 +65,13 @@ export function boardFor(board, key) {
 
 // How long to wait before asking the scoreboard again, or null once the whole week is over.
 // It keeps checking even when nothing is live yet, so a game that kicks off later is noticed.
+// When a game kicked off, from the schedule (0 if it isn't listed). Used to keep the feed in game order.
+export function kickoffOf(week, key) {
+  const [a, h] = String(key).split('@');
+  const g = SCHEDULE_ALL.find(x => x.w === week && ((x.a === a && x.h === h) || (x.a === h && x.h === a)));
+  return g ? Date.parse(g.t) : 0;
+}
+
 export function nextPollMs(board, week, now = Date.now()) {
   const games = SCHEDULE_ALL.filter(g => g.w === week);
   if (Object.values(board || {}).some(g => g.state === 'in')) return 30000;
