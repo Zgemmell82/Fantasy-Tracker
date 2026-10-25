@@ -331,10 +331,11 @@ function AllLive({ games, board, helper, scored }) {
         const rel = relevantPlay(m);
         if (impact === 'scoring' ? !m.scoring || (!allScoring && !rel) : impact !== 'all' && !rel) return;
         const p = rel ? { ...rel, relevant: true } : { ...m, hits: [] };
-        out.push({ p, game: { away: f.away || info.away, home: f.home || info.home }, gid: info.id, seen: feeds.seenAt(info.id, p.id) });
+        out.push({ p, game: { away: f.away || info.away, home: f.home || info.home }, gid: info.id, live: info.state === 'in', seen: feeds.seenAt(info.id, p.id) });
       });
     });
-    return out.sort((a, b) => (b.seen - a.seen) || (b.p.period - a.p.period) || (clockSecs(a.p.clock) - clockSecs(b.p.clock)) || (b.p.seq - a.p.seq));
+    const rank = x => (x.live ? 0 : 1);
+    return out.sort((a, b) => (b.seen - a.seen) || ((b.p.at || 0) - (a.p.at || 0)) || (rank(a) - rank(b)) || (b.p.period - a.p.period) || (clockSecs(a.p.clock) - clockSecs(b.p.clock)) || (b.p.seq - a.p.seq));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feeds.byId, impact, allScoring, board, rules]);
 

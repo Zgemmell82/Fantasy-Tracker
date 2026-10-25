@@ -111,3 +111,20 @@ test('rushing yards count even when ESPN\'s yardage field reads zero or the text
   assert.equal(est2(play('J.Warren left end to PIT 30 for 5 yards (T.Smith).', 0), re, 'rusher'), 0.5);
   assert.equal(est2(play('J.Warren up the middle to PIT 22 for a loss of 3 yards (D.Lloyd).'), re, 'rusher'), -0.3);
 });
+
+test('scoring-summary wording ("Joe Mixon 5 Yd Run") and spelled-out names still score', () => {
+  const tr = [{ uid: 'a', name: 'Jaylen Warren', pos: 'RB', team: 'PIT', side: 'mine', leagues: ['A'] }, { uid: 'b', name: "D'Andre Swift", pos: 'RB', team: 'CHI', side: 'mine', leagues: ['A'] }];
+  const mk = (text, extra = {}) => ({ id: '1', seq: 1, period: 1, clock: '5:00', text, type: 'Rushing Touchdown', scoring: true, scoredBy: 'PIT', offense: 'PIT', yards: null, ...extra });
+  const [a] = matchPlays([mk('Jaylen Warren 5 Yd Run (Chris Boswell Kick)')], tr);
+  assert.deepEqual([a.hits[0].role, a.hits[0].est], ['rusher', 6.5]);            // 5 x .1 + 6
+  const [b] = matchPlays([mk("D'Andre Swift 12 Yd Run (Cairo Santos Kick)", { scoredBy: 'CHI', offense: 'CHI' })], tr);
+  assert.deepEqual([b.hits[0].role, b.hits[0].est], ['rusher', 7.2]);
+  const [c] = matchPlays([mk('J.Warren left end to PIT 30 for 5 yards (T.Smith).', { scoring: false, type: 'Rush', yards: 0 })], tr);
+  assert.equal(c.hits[0].est, 0.5);
+});
+
+test('plays carry their wall-clock time so they can be ordered across games', () => {
+  const sum = { header: { competitions: [{ competitors: [{ homeAway: 'home', team: { id: '1', abbreviation: 'PIT' } }, { homeAway: 'away', team: { id: '2', abbreviation: 'CLE' } }] }] },
+    drives: { previous: [{ plays: [{ id: '1', sequenceNumber: '1', text: 'x', period: { number: 1 }, clock: { displayValue: '15:00' }, wallclock: '2026-10-25T17:02:03Z' }] }] } };
+  assert.equal(parsePlays(sum).plays[0].at, Date.parse('2026-10-25T17:02:03Z'));
+});

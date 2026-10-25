@@ -142,6 +142,7 @@ export function parsePlays(summary) {
       down: start.downDistanceText || start.shortDownDistanceText || '',
       offense: start.team && teamIds[start.team.id] || (d.team && normTeam(d.team.abbreviation)) || (p.team && teamIds[p.team.id]) || '',
       yards: typeof p.statYardage === 'number' ? p.statYardage : null,
+      at: p.wall || p.wallclock ? Date.parse(p.wall || p.wallclock) || 0 : 0,      // when it happened, if ESPN says (orders plays across games)
       homeScore: hs, awayScore: as
     });
   }));
@@ -165,7 +166,8 @@ export function nameRe(full) {
   if (!first) return null;
   // ESPN abbreviates first names to 1–3 letters ("J.Chase", "Ja.Chase").
   const firsts = [1, 2, 3].map(n => first.slice(0, n)).filter((v, i, a) => v && a.indexOf(v) === i);
-  return '(?:' + firsts.map(esc).join('|') + ')\\.\\s?' + esc(last) + '(?![A-Za-z])';
+  // ESPN abbreviates first names in the play text ("J.Chase", "Ja.Chase") but spells them out in scoring summaries ("Joe Mixon 5 Yd Run").
+  return '(?:(?:' + firsts.map(esc).join('|') + ')\\.\\s?|' + esc(parts[0]) + '\\s+)' + esc(last) + '(?![A-Za-z])';
 }
 
 const DEF_KEYWORDS = /sack|intercept|fumble recovery \(opponent\)|safety|blocked|return touchdown/i;
@@ -176,8 +178,9 @@ const DEF_KEYWORDS = /sack|intercept|fumble recovery \(opponent\)|safety|blocked
 export function yardsOf(play) {
   const t = play.text || '';
   const loss = t.match(/for a loss of (\d+) yards?/i);
+  const yd = t.match(/\b(-?\d+) Yd (?:Run|Rush|pass|Pass|Reception)/);       // scoring summaries: "J.Warren 5 Yd Run"
   const gain = t.match(/for (-?\d+) yards?/i);
-  const fromText = loss ? -Number(loss[1]) : gain ? Number(gain[1]) : /for no gain/i.test(t) ? 0 : null;
+  const fromText = loss ? -Number(loss[1]) : gain ? Number(gain[1]) : yd ? Number(yd[1]) : /for no gain/i.test(t) ? 0 : null;
   if (typeof play.yards === 'number' && play.yards !== 0) return play.yards;
   return fromText != null ? fromText : (typeof play.yards === 'number' ? play.yards : 0);
 }
@@ -187,7 +190,8 @@ export function estimate(play, re, role, rules = DEFAULT_RULES) {
   const t = play.text;
   if (/no play/i.test(t) && /penalty/i.test(t)) return 0;
   const yards = yardsOf(play);
-  const td = /TOUCHDOWN/i.test(t) && (!play.scoredBy || play.scoredBy === play.offense);
+  const scoringSummary = play.scoring && /\bYd (?:Run|Rush|pass|Pass|Reception)\b/.test(t) && !/field goal|safety/i.test(t);
+  const td = (/TOUCHDOWN/i.test(t) || scoringSummary) && (!play.scoredBy || play.scoredBy === play.offense);
   let pts = 0;
   if (role === 'passer') {
     if (/INTERCEPTED/i.test(t)) pts += rules.passInt;
@@ -242,7 +246,8 @@ export function idpPoints(play, re, rules = IDP_RULES) {
 
 export function roleOf(text, re) {
   if (new RegExp(re + '\\s+(?:\\d+\\s+yard field goal|extra point)').test(text)) return 'kicker';
-  if (new RegExp(re + '\\s+(?:pass|sacked|spiked)').test(text)) return 'passer';
+  if (new RegExp(re + '\\s+(?:pass|sacked|spiked|\\d+\\s+Yd\\s+pass)').test(text)) return 'passer';
+  if (new RegExp(re + '\\s+\\d+\\s+Yd\\s+(?:Run|Rush)').test(text)) return 'rusher';
   if (new RegExp('pass[^.]*?\\bto\\s+' + re).test(text)) return 'receiver';
   if (new RegExp('^(?:\\([^)]*\\)\\s*)*' + re + '\\s+(?!pass|sacked|kneels|spiked|punts|kicks)').test(text)) return 'rusher';
   return 'other';
