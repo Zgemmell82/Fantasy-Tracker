@@ -4,20 +4,22 @@ import * as THREE from 'three';
 function drawButton(canvas, text, hover, sub) {
   const g = canvas.getContext('2d');
   const { width: w, height: h } = canvas;
+  const k = w / 512;
   g.clearRect(0, 0, w, h);
-  g.fillStyle = hover ? '#ffcc4d' : '#e08a2a';
-  g.strokeStyle = '#4a2a10'; g.lineWidth = 8;
-  const r = 28;
+  g.fillStyle = hover ? '#ffcc4d' : (canvas._fill || '#e08a2a');
+  g.strokeStyle = '#4a2a10'; g.lineWidth = 8 * k;
+  const r = 28 * k;
+  const e = 4 * k;
   g.beginPath();
-  g.moveTo(r, 4); g.lineTo(w - r, 4); g.quadraticCurveTo(w - 4, 4, w - 4, r);
-  g.lineTo(w - 4, h - r); g.quadraticCurveTo(w - 4, h - 4, w - r, h - 4);
-  g.lineTo(r, h - 4); g.quadraticCurveTo(4, h - 4, 4, h - r);
-  g.lineTo(4, r); g.quadraticCurveTo(4, 4, r, 4); g.closePath();
+  g.moveTo(r, e); g.lineTo(w - r, e); g.quadraticCurveTo(w - e, e, w - e, r);
+  g.lineTo(w - e, h - r); g.quadraticCurveTo(w - e, h - e, w - r, h - e);
+  g.lineTo(r, h - e); g.quadraticCurveTo(e, h - e, e, h - r);
+  g.lineTo(e, r); g.quadraticCurveTo(e, e, r, e); g.closePath();
   g.fill(); g.stroke();
   g.fillStyle = '#2b1606'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.font = `bold ${sub ? 44 : 54}px Trebuchet MS, sans-serif`;
+  g.font = `bold ${(sub ? 44 : 54) * k * (canvas._fs || 1)}px Trebuchet MS, sans-serif`;
   g.fillText(text, w / 2, sub ? h * 0.38 : h / 2);
-  if (sub) { g.font = '30px Trebuchet MS, sans-serif'; g.fillText(sub, w / 2, h * 0.7); }
+  if (sub) { g.font = `${30 * k}px Trebuchet MS, sans-serif`; g.fillText(sub, w / 2, h * 0.7); }
 }
 
 export class Ui3D {
@@ -28,9 +30,9 @@ export class Ui3D {
   }
   get active() { return this.buttons.length > 0; }
 
-  addButton({ text, sub, pos, width = 0.5, height = 0.2, rotY = 0, onSelect }) {
+  addButton({ text, sub, pos, width = 0.5, height = 0.2, rotY = 0, onSelect, res = 512, fill, fs = 1 }) {
     const canvas = document.createElement('canvas');
-    canvas.width = 512; canvas.height = Math.round(512 * height / width);
+    canvas.width = res; canvas.height = Math.round(res * height / width); canvas._fill = fill; canvas._fs = fs;
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));

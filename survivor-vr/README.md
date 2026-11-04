@@ -17,15 +17,59 @@ Open three pages (the dev server also relays messages between them over a WebSoc
 |---|---|---|
 | Host / headset | `/index.html` | the PC (or Quest browser). Challenge picker, host + debug panel, 3D scene |
 | TV view | `/tv.html?room=CODE` | the TV: mirrored headset view, timer, anonymous effect feed, vote readout |
-| Phone | `/phone.html` (+ room code) | each player's phone (use the LAN URL shown in the host panel, e.g. `http://192.168.x.x:5173/phone.html`) |
+| Phone | `/phone.html` (+ room code) – campaign only | each player's phone (use the LAN URL shown in the host panel, e.g. `http://192.168.x.x:5173/phone.html`) |
 
-No phones handy? Either
+No phones handy (Survivor campaign)? Either
 - host panel → **+ Bot** / **+ 5 Bots**, then the Debug panel (Jump to any phase, Bots tap/vote, Skip run); or
 - open `/phone.html?room=CODE&debug=1` – the ⚙ drawer lets one tab act as several fake players.
 The room code is shown in the host panel and on the TV; the host page keeps its code across reloads (`?room=ABCD` to force one).
 
 Without the relay (static hosting) the pages still sync between tabs of the same browser via BroadcastChannel.
 `npm run build && npm run preview` serves a production build with the relay too.
+
+## Main menu
+
+The host page opens on a **main menu** (the TV shows "Main menu" and the room code):
+
+- **🏝️ Survivor Campaign** – the full party game below (phones + headset + TV).
+- **🔥 Fire Making** – a standalone mini game, **headset + TV only** (phones show "no phones needed"; no help/sabotage taps).
+
+Every host panel has a **☰ Main menu** button. (Automation/console: `window.__app.setMode('menu'|'campaign'|'fire')`.)
+
+## 🔥 Fire Making (standalone mini game)
+
+**Flow.** Menu → Fire Making → enter the number of players (1–12, `config/firegame.js → players`) → **Start**. For each player:
+the TV says **"Player N, you're up."** → they put on the headset and type their own name on the **virtual keyboard**
+(max 12 chars, blank = "Player N"; on desktop you can also type on your keyboard) → **BEGIN!** starts the clock. **One attempt, no retries.**
+The clock stops the instant the flag rises. Fire dies / they tap **GIVE UP** twice / the safety time limit hits → **DNF**.
+After every run the name + time go on the **live TV scoreboard** (fastest first, DNFs at the bottom). After the last player the TV
+crowns the fastest time, and the host chooses **Play Again** or **Back to Menu**.
+
+**The challenge** (stationary, hands/arms only). A fire pit holds twigs, branches and a log; beside it: a branch to shave, a knife, a flint,
+extra fuel. A rope hangs over the fire holding a flag down.
+
+1. **Prepare fuel** – shave tinder curls off the branch with the knife (move the knife quickly along it), then drop the right
+   amount of curls into the nest on the fuel. Too little (<~3 curls) won't catch; too much smothers the fire.
+2. **Ignite** – strike the flint against the knife over the nest. Spark quality = strike speed × angle (a slanted scrape is best) and
+   sparks must land on dry tinder. *Desktop:* grab the knife and flick the mouse quickly over the nest (the flint is implied).
+3. **Grow the fire** – blow on the ember. If the headset mic works (host panel **enable mic**, or automatic on Start – it needs the click), blowing
+   into the mic feeds oxygen; otherwise it falls back to **fanning with a controller** (waving either hand over the fire). *Desktop:* hold
+   **Space** / right mouse, or flick the mouse when not holding anything. Blowing too hard on a weak ember snuffs it. Fuel burns down –
+   drag more twigs/branches/logs from the pile onto the fire.
+4. **Win** – when the flame is tall and hot enough it fills the rope's heat buffer; the rope snaps, the flag pops up, the clock stops.
+
+**Simulation** (`src/host/firegame/sim.js`, no fluid physics): each fuel piece has heat value, moisture, burn rate and ignition
+temperature; the flame has heat and oxygen levels; tinder has an amount/dryness; the rope has a heat buffer that fills only while a hot flame
+tip reaches it. Rendering (particle flame, ember glow, sparks, glowing rope) is layered over those numbers. **Every tuning value is in
+`src/config/firegame.js`** (fuel stats, tinder window, spark speed/angle, shave speed, oxygen/blow thresholds incl. mic and fan ranges, rope capacity/heat rate,
+fail condition, player limits, name length, time limit).
+
+**Test it without a headset.** Open `/index.html` → Fire Making, `/tv.html?room=CODE` for the TV. The host **Debug panel** has: *Jump* to
+any state (setup / up / naming / running / result / mid-game scoreboard / final / everyone-DNF), *Auto name + begin*, **Autopilot (good)** and
+**Autopilot (blows wrong → DNF)**, *Place 5 tinder*, *Spark*, *Blow 50%*, *+twig/+branch/+log*, *Force rope snap*, *Kill fire*, a **speed ×1/2/4**
+selector, and a live readout of heat / oxygen / tinder / fuel states / rope buffer. Headless checks: `npm run test:fire`
+(`scripts/fire-test.mjs`: sim behaviour + one-attempt state machine); `npm test` runs these plus the campaign flow test.
+The mic path and XR grabbing (knife + flint in two hands, controller fanning) have **not been tried on a Quest 1** – thresholds are in config.
 
 ## The full game
 

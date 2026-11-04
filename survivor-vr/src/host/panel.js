@@ -25,8 +25,15 @@ export function initPanel({ game, api, mic, code }) {
 
   function render() {
     const g = game;
+    $('#camp').style.display = api.mode() === 'campaign' ? '' : 'none';
+    $('#debug').style.display = api.mode() === 'campaign' ? '' : 'none';
     const meta = CHALLENGE_META[g.challengeId];
     const mode = !g.started ? 'lobby' : g.episodeType === 'finale' ? 'FINALE' : g.twoTribes && !g.merged ? 'two tribes' : g.twoTribes ? 'merged' : 'one tribe';
+    if (api.mode() !== 'campaign') {
+      statusEl.innerHTML = `Room code <span class="pill" style="font-size:18px;font-weight:800;letter-spacing:.2em">${code}</span> · ${api.mode() === 'menu' ? 'main menu' : 'fire making'}
+        <br>Link: <span class="pill">${api.netMode()}</span> TV: <span class="pill">${api.tvAlive() ? 'connected' : 'not seen'}</span> Mic: <span class="pill">${esc(mic.status)}</span>`;
+      return;
+    }
     statusEl.innerHTML = `Room code <span class="pill" style="font-size:18px;font-weight:800;letter-spacing:.2em">${code}</span>
       <br>Phase: <span class="pill">${g.phase}</span> · ${mode} · ep ${g.episode || '-'} ${meta ? '· ' + esc(meta.name) : ''}
       ${g.headsetId ? `<br>In headset: <b>${esc(g.name(g.headsetId))}</b>${g.run?.relay ? ` · tribe ${g.run.group} clock ${g.relayTotal().toFixed(1)}s` : ''}` : ''}
@@ -67,10 +74,12 @@ export function initPanel({ game, api, mic, code }) {
     if (g.phase === 'jury') h += `<div class="row muted">Jury votes in ${Object.keys(g.jury.votes).length}/${g.jury.jurors.length}</div>`;
     if (g.phase === 'running') h += `<div class="row muted">Taps used: ${g.tappers().length - g.tapsLeft()}/${g.tappers().length}</div>`;
     if (CONTINUE[g.phase]) h += `<div class="row"><button class="btn" id="cont">${CONTINUE[g.phase]}</button></div>`;
+    h += `<div class="row"><button class="btn alt sm" id="tomenu">☰ Main menu</button></div>`;
     if (g.started) h += `<div class="row"><button class="btn alt sm" id="abort">Abort episode</button><button class="btn alt sm" id="reset">New game</button></div>`;
     h += `<div class="row"><button class="btn alt sm" id="mic">${mic.enabled ? '🎤 Mic on (click to turn off)' : '🎤 Enable mic for blowing (fire challenge)'}</button></div>`;
     flowEl.innerHTML = h;
     const on = (id, fn) => { const e = $('#' + id); if (e) e.onclick = fn; };
+    on('tomenu', () => api.toMenu());
     on('start', () => { const r = g.startGame(); if (!r.ok) alert(r.reason); });
     on('cont', () => g.next());
     on('abort', () => api.abortEpisode());

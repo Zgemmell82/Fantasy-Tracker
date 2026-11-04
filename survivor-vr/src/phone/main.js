@@ -64,6 +64,13 @@ function render() {
     return;
   }
   if (!S) { app.innerHTML = `<div class="card center"><h2>🌴 Connecting…</h2><div class="muted">Looking for room <b>${esc(room)}</b>. <a href="#" id="chg" style="color:var(--fire2)">Change code</a></div></div>`; $('#chg').onclick = (e) => { e.preventDefault(); room = ''; store.set('room', ''); render(); }; return; }
+  if (S.mode && S.mode !== 'campaign') {
+    lastKey = '';
+    app.innerHTML = S.mode === 'fire'
+      ? `<div class="card center"><h2>🔥 Fire Making</h2><p class="muted">This mini game is headset + TV only. No phones, no taps - just watch the TV.</p></div>`
+      : `<div class="card center"><h2>🌴 Main menu</h2><p class="muted">Waiting for the host to pick a game. If it is the Survivor campaign you can join as soon as it opens.</p></div>`;
+    return;
+  }
   const mine = playerOf(me().pid), T = S.tribal;
   const key = [S.phase, S.episode, S.headsetId, mine ? mine.status + mine.tribe : 'out', S.taps?.[me().pid] || '', T?.voted?.includes(me().pid), T?.stage, S.immunityId, meIdx, joinError,
     S.jury?.voted?.includes(me().pid), S.tappers?.includes(me().pid), S.finale?.pitchIndex, S.tribal?.readout?.index, S.merged, S.winnerId].join('|');

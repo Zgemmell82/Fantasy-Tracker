@@ -9,6 +9,10 @@ import { buildWorld } from './world.js';
 import { Game } from './game.js';
 import { initPanel } from './panel.js';
 import { MicInput } from './mic.js';
+import { FireGame } from './firegame/state.js';
+import { FireMakingScene } from './firegame/scene.js';
+import { initFirePanel } from './firepanel.js';
+import { FIREGAME } from '../config/firegame.js';
 import { CHALLENGE_CLASSES } from './challenges/index.js';
 import { CHALLENGES } from '../config/challenges.js';
 import { SCORING, fmtSeconds } from '../config/scoring.js';
@@ -32,7 +36,9 @@ const readyUi = new Ui3D(stage.world);
 const mic = new MicInput();
 let current = null;           // active Challenge instance
 let lastTick = 0, tvSeen = 0;
-let ui = null;
+let ui = null, fireUi = null;
+let mode = 'menu';            // 'menu' | 'campaign' | 'fire'   (main menu first)
+let fireScene = null;
 
 // ---------- game <-> scene bridge ----------
 const runner = {
@@ -81,6 +87,37 @@ function disposeCurrent() {
 
 const game = new Game(runner);
 game.code = code;
+
+// ---------- standalone Fire Making mini game ----------
+const fireGame = new FireGame({
+  prepare(n) {
+    disposeFireScene();
+    stage.calibrateHeight(); hands.originY = stage.world.position.y;
+    hud.timerFn = null;
+    fireScene = new FireMakingScene({
+      stage, hands, hud, mic, config: FIREGAME, rng: mulberry32((Math.random() * 1e9) | 0),
+      finish: (res) => fireGame.finish(res),
+      onBegin: (name) => fireGame.begin(name),
+    });
+    fireScene.setup({ defaultName: `Player ${n}` });
+    $('#help').textContent = 'FIRE: drag the knife along the branch to shave curls · drop curls in the nest · flick the knife over the nest to strike · hold Space to blow · drag fuel onto the fire';
+  },
+  begin(name) { fireScene?.begin(name); },
+});
+function disposeFireScene() { if (fireScene) { fireScene.dispose(); fireScene = null; } hud.timerFn = null; }
+
+function setMode(m) {
+  if (m === mode) return;
+  if (mode === 'campaign') { disposeCurrent(); if (game.started) game.abortEpisode(); }
+  if (mode === 'fire') { disposeFireScene(); fireGame.reset(); }
+  mode = m;
+  if (m === 'fire') fireGame.reset();
+  hands.showLasers(false); readyUi.clear();
+  $('#help').textContent = '';
+  hud.timerFn = null; hud.set({ title: 'SURVIVOR VR', timer: '', big: m === 'menu' ? 'MAIN MENU' : '', line: '' });
+  ui?.render(); fireUi?.render(); broadcastState();
+}
+window.__app = { setMode, getMode: () => mode, fireGame, getFireScene: () => fireScene };
 window.__game = game;     // handy for debugging / automated tests
 window.__hands = hands; window.__stage = stage;
 Object.defineProperty(window, '__challenge', { get: () => current });
@@ -110,13 +147,19 @@ function handle(m) {
 }
 
 let statePending = false;
-function broadcastState() { net.send({ t: 'state', s: game.publicState() }); }
-game.onChange = () => {
-  ui?.render();
+function publicAppState() {
+  if (mode === 'menu') return { mode: 'menu', code };
+  if (mode === 'fire') return { ...fireGame.publicState(), code };
+  return { ...game.publicState(), mode: 'campaign' };
+}
+function broadcastState() { net.send({ t: 'state', s: publicAppState() }); }
+const scheduleBroadcast = () => {
   if (statePending) return;
   statePending = true;
   queueMicrotask(() => { statePending = false; broadcastState(); });
 };
+game.onChange = () => { ui?.render(); if (mode === 'campaign') scheduleBroadcast(); };
+fireGame.onChange = () => { fireUi?.render(); if (mode === 'fire') scheduleBroadcast(); };
 
 stage.onMirror = (dataUrl) => {
   if (performance.now() - tvSeen < 10000 && net.mode !== 'connecting') net.send({ t: 'frame', d: dataUrl }, 'tv');
@@ -126,6 +169,7 @@ stage.onMirror = (dataUrl) => {
 ui = initPanel({
   game, mic, code,
   api: {
+    mode: () => mode, toMenu: () => setMode('menu'),
     netMode: () => net.mode,
     tvAlive: () => performance.now() - tvSeen < 8000,
     abortEpisode: () => { disposeCurrent(); game.abortEpisode(); },
@@ -139,6 +183,9 @@ ui = initPanel({
     },
   },
 });
+
+fireUi = initFirePanel({ fireGame, getScene: () => fireScene, setMode, getMode: () => mode, mic, disposeScene: disposeFireScene });
+ui.render();
 
 // links
 fetch('/__info').then((r) => r.json()).then((info) => {
@@ -164,6 +211,24 @@ let t = 0;
 stage.frameCbs.push((dt, now) => {
   t += dt;
   hands.update(now);
+  if (mode === 'fire') {
+    const sdt = dt * (window.__fireSpeed || 1);
+    fireGame.update(sdt);
+    if (fireScene) {
+      fireScene.ui.update(hands.pointerRays());
+      for (let i = 0; i < (window.__fireSpeed || 1); i++) fireScene.update(dt, now);
+    }
+    world.tick(t); hud.update(now); hands.endFrame();
+    banner.style.display = mode === 'fire' && fireGame.current && fireGame.phase !== 'setup' && fireGame.phase !== 'final' ? 'block' : 'none';
+    banner.textContent = `${fireGame.current?.name || ''} · player ${fireGame.index + 1}/${fireGame.total}${fireScene && fireGame.phase === 'running' ? ' · ' + fireScene.getProgress() : ''}`;
+    cd.style.display = 'none';
+    if (now - lastTick > 200) {
+      lastTick = now;
+      if (fireScene && ['naming', 'running', 'result'].includes(fireGame.phase)) net.send({ t: 'tick', timer: fireScene.getTimer(), progress: fireScene.getProgress() }, 'tv');
+    }
+    return;
+  }
+  if (mode === 'menu') { world.tick(t); hud.update(now); hands.endFrame(); banner.style.display = 'none'; cd.style.display = 'none'; return; }
   game.update(dt);
 
   const rays = hands.pointerRays();

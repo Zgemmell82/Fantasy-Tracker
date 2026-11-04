@@ -9,18 +9,18 @@
   body { overflow: hidden; }
   .screen { position: fixed; inset: 0; padding: 2.2vh 2.5vw; display: none; }
   .screen.on { display: grid; }
-  #screen-game { grid-template-columns: 1fr 27vw; gap: 2vw; }
+  #screen-game, #screen-fire { grid-template-columns: 1fr 27vw; gap: 2vw; }
   .viewwrap { position: relative; background: #000; border-radius: 18px; overflow: hidden; border: 4px solid #5a3a1e; align-self: center; aspect-ratio: 16/9; width: 100%; }
-  #mirror { width: 100%; height: 100%; object-fit: cover; display:block; background:#123; }
-  #hudtop { position:absolute; left:0; right:0; top:0; display:flex; justify-content:space-between; align-items:flex-start; padding: 1.4vh 1.4vw;
+  #mirror, #fmirror { width: 100%; height: 100%; object-fit: cover; display:block; background:#123; }
+  #hudtop, #fhud { position:absolute; left:0; right:0; top:0; display:flex; justify-content:space-between; align-items:flex-start; padding: 1.4vh 1.4vw;
     background: linear-gradient(#000a, #0000); }
-  #who { font-size: 2.6vh; font-weight: 700; } #who small { display:block; font-weight: 400; color: var(--sand); font-size: 2vh; }
-  #timer { font-size: 9vh; font-weight: 900; color: var(--fire2); line-height: 1; text-shadow: 0 4px 16px #000; font-variant-numeric: tabular-nums; }
-  #timer small { display:block; font-size: 2vh; color: var(--sand); text-align:right; }
-  #progress { position:absolute; left:1.4vw; bottom:1.4vh; font-size: 3.4vh; font-weight:800; text-shadow: 0 3px 10px #000; }
+  #who, #fwho { font-size: 2.6vh; font-weight: 700; } #who small, #fwho small { display:block; font-weight: 400; color: var(--sand); font-size: 2vh; }
+  #timer, #ftimer { font-size: 9vh; font-weight: 900; color: var(--fire2); line-height: 1; text-shadow: 0 4px 16px #000; font-variant-numeric: tabular-nums; }
+  #timer small, #ftimer small { display:block; font-size: 2vh; color: var(--sand); text-align:right; }
+  #progress, #fstatus { position:absolute; left:1.4vw; bottom:1.4vh; font-size: 3.4vh; font-weight:800; text-shadow: 0 3px 10px #000; }
   #cdbig { position:absolute; inset:0; display:none; align-items:center; justify-content:center; font-size: 30vh; font-weight:900; color: var(--fire2); text-shadow: 0 8px 40px #000; }
-  #card { position:absolute; inset:0; display:none; align-items:center; justify-content:center; flex-direction: column; background: #000b; text-align:center; }
-  #card .big { font-size: 8vh; font-weight: 900; color: var(--fire2); }
+  #card, #fcard { position:absolute; inset:0; display:none; align-items:center; justify-content:center; flex-direction: column; background: #000b; text-align:center; }
+  #card .big, #fcard .big { font-size: 8vh; font-weight: 900; color: var(--fire2); }
   aside { display:flex; flex-direction: column; gap: 1.6vh; min-height:0; }
   aside h3 { color: var(--sand); text-transform: uppercase; letter-spacing:.1em; font-size: 2vh; }
   #feed { list-style:none; margin:0; padding:0; display:flex; flex-direction: column-reverse; gap: .9vh; flex: 1; overflow:hidden; justify-content:flex-end; }
@@ -45,6 +45,7 @@
   .urls { margin-top: 3vh; font-size: 3.2vh; background: #0007; padding: 2vh 3vw; border-radius: 16px; }
   .urls b { color: var(--fire2); }
   .tally .r { font-size: 3.6vh; }
+  #fboard .r { display:flex; gap:1vw; align-items:center; background: var(--card); padding: 1.1vh 1.2vw; border-radius: 12px; font-size: 2.8vh; margin-bottom: .9vh; } #fboard .r.win { background: linear-gradient(90deg,#8a5a10,#c8892a); } #fboard .r .v { margin-left:auto; font-weight:800; font-variant-numeric: tabular-nums; } #fboard .r.dnf { opacity:.6; }
   .snuff { opacity:.45; text-decoration: line-through; }
   .code { font-size: 22vh; font-weight: 900; letter-spacing: .15em; color: var(--fire2); text-shadow: 0 6px 30px #000a; line-height: 1; }
   .tribecol { display:inline-block; vertical-align: top; min-width: 28vw; margin: 0 2vw; padding: 3vh 2vw; border-radius: 20px; background: var(--card); border: .6vh solid; }
@@ -73,6 +74,15 @@
     <div id="tapinfo" class="sm"></div>
     <div id="tribe"></div>
   </aside>
+</div>
+<div id="screen-fire" class="screen">
+  <div class="viewwrap">
+    <img id="fmirror" alt="" />
+    <div id="fhud"><div id="fwho"></div><div id="ftimer"></div></div>
+    <div id="fstatus"></div>
+    <div id="fcard"></div>
+  </div>
+  <aside><h3>🔥 Scoreboard</h3><div id="fboard"></div><div id="fnote" class="sm"></div></aside>
 </div>
 <div id="screen-other" class="screen"></div>
 <script type="module" src="/src/tv/main.js"></script>

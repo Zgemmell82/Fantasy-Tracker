@@ -8,7 +8,9 @@
     "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview --host",
-    "test:flow": "node scripts/flow-test.mjs"
+    "test:flow": "node scripts/flow-test.mjs",
+    "test:fire": "node scripts/fire-test.mjs",
+    "test": "node scripts/flow-test.mjs && node scripts/fire-test.mjs"
   },
   "dependencies": {
     "cannon-es": "^0.20.0",

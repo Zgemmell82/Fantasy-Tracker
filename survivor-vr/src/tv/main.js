@@ -19,7 +19,7 @@ function start(r) {
   net = connect({ role: 'tv', room, onMessage: (m) => {
     if (m.t === 'state') { S = m.s; receivedAt = performance.now(); render(); }
     else if (m.t === 'tick') { tick = { timer: m.timer, at: performance.now(), progress: m.progress }; }
-    else if (m.t === 'frame') { $('#mirror').src = m.d; }
+    else if (m.t === 'frame') { $('#mirror').src = m.d; $('#fmirror').src = m.d; }
   } });
   setInterval(() => { net.send({ t: 'tv-ping' }); if (!S) net.send({ t: 'hello' }); }, 2500);
   setTimeout(() => { net.send({ t: 'tv-ping' }); net.send({ t: 'hello' }); }, 400);
@@ -42,6 +42,8 @@ function show(id) { for (const el of document.querySelectorAll('.screen')) el.cl
 
 function render() {
   if (!S) return;
+  if (S.mode === 'menu') { show('screen-other'); $('#screen-other').innerHTML = `<div><div class="big">🌴 SURVIVOR VR</div><div class="mid">Main menu</div><div class="sm" style="margin-top:3vh">The host is choosing a game…</div><div class="code" style="font-size:9vh;margin-top:4vh">${esc(S.code)}</div></div>`; return; }
+  if (S.mode === 'fire') return renderFire();
   const gamePhases = ['turnReady', 'countdown', 'running', 'handoff', 'turnResult'];
   if (gamePhases.includes(S.phase)) { show('screen-game'); renderGame(); return; }
   show('screen-other');
@@ -205,9 +207,46 @@ function renderGame() {
   } else $('#tribe').innerHTML = group(S.players.filter((x) => x.status === 'active'));
 }
 
+// ---------- standalone Fire Making ----------
+const secs = (s) => { const m = Math.floor(s / 60); const r = (s - m * 60).toFixed(1).padStart(m ? 4 : 3, '0'); return m ? `${m}:${r}` : r + 's'; };
+function boardHtml(sb, winIdx = 0) {
+  return sb.map((r, i) => `<div class="r ${r.dnf ? 'dnf' : i === winIdx ? 'win' : ''}"><b>${r.rank}.</b><span>${esc(r.name)}</span><span class="v">${r.dnf ? 'DNF' : secs(r.time)}</span></div>`).join('');
+}
+function renderFire() {
+  const ph = S.phase;
+  const sb = S.scoreboard || [];
+  if (ph === 'setup') { show('screen-other'); $('#screen-other').innerHTML = `<div><div class="big">🔥 FIRE MAKING</div><div class="mid">Headset + TV only. One attempt each. Fastest fire wins.</div><div class="sm" style="margin-top:3vh">Host is setting up…</div></div>`; return; }
+  if (ph === 'up') {
+    show('screen-other');
+    $('#screen-other').innerHTML = `<div><div class="mid">Fire Making · ${S.n} of ${S.total}</div><div class="big" style="font-size:12vh">Player ${S.n}, you're up.</div><div class="mid">Put on the headset and type your name.</div>
+      ${sb.length ? `<div class="board" style="margin:3vh auto 0">${boardHtml(sb)}</div>` : ''}</div>`; return;
+  }
+  if (ph === 'final') {
+    show('screen-other');
+    const w = S.winner;
+    $('#screen-other').innerHTML = `<div>${w ? `<div class="crown">👑</div><div class="mid">Fastest fire</div><div class="big" style="font-size:12vh">${esc(w.name)}</div><div class="mid">${secs(w.time)}</div>` : `<div class="big">Nobody made fire</div><div class="mid">Everyone DNF</div>`}
+      <div class="board" style="margin:3vh auto 0">${boardHtml(sb)}</div><div class="sm" style="margin-top:2vh">Host: Play Again or Back to Menu</div></div>`; return;
+  }
+  show('screen-fire');
+  $('#fwho').innerHTML = `${esc(S.current?.name)} <small>Player ${S.n} of ${S.total}</small>`;
+  $('#fboard').innerHTML = boardHtml(sb) || '<div class="sm">No times yet</div>';
+  $('#fnote').textContent = S.remaining > (ph === 'result' ? 0 : 1) ? `${S.remaining - (ph === 'result' ? 0 : 1)} still to play` : '';
+  const card = $('#fcard');
+  if (ph === 'result' && S.last) {
+    card.style.display = 'flex';
+    card.innerHTML = `<div class="mid">${esc(S.last.name)}</div><div class="big">${S.last.dnf ? 'DNF' : secs(S.last.time)}</div>${S.last.dnf ? `<div class="sm">${esc(S.last.reason)}</div>` : '<div class="sm">🚩 The flag rises!</div>'}`;
+  } else card.style.display = 'none';
+  if (ph === 'naming') { $('#ftimer').innerHTML = ''; $('#fstatus').textContent = 'Typing their name…'; }
+}
+
 // smooth timer between 5 Hz ticks + countdown widgets
 function loop() {
-  if (S && tick.timer && ['countdown', 'running', 'turnResult', 'handoff'].includes(S.phase)) {
+  if (S && S.mode === 'fire' && ['running', 'result'].includes(S.phase) && tick.timer) {
+    let v = tick.timer.value;
+    if (S.phase === 'running' && tick.timer.mode === 'up') v += (performance.now() - tick.at) / 1000;
+    $('#ftimer').innerHTML = `${fmt(Math.max(0, v))}<small>TIME</small>`;
+    $('#fstatus').textContent = S.phase === 'running' ? (tick.progress || '') : '';
+  } else if (S && S.mode !== 'fire' && tick.timer && ['countdown', 'running', 'turnResult', 'handoff'].includes(S.phase)) {
     let v = tick.timer.value;
     if ((S.phase === 'running' || S.phase === 'handoff') && tick.timer.mode === 'up') v += (performance.now() - tick.at) / 1000;
     $('#timer').innerHTML = `${fmt(Math.max(0, v))}<small>${esc(tick.timer.label)}</small>`;
