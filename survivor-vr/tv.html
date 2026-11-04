@@ -46,9 +46,19 @@
   .urls b { color: var(--fire2); }
   .tally .r { font-size: 3.6vh; }
   .snuff { opacity:.45; text-decoration: line-through; }
+  .code { font-size: 22vh; font-weight: 900; letter-spacing: .15em; color: var(--fire2); text-shadow: 0 6px 30px #000a; line-height: 1; }
+  .tribecol { display:inline-block; vertical-align: top; min-width: 28vw; margin: 0 2vw; padding: 3vh 2vw; border-radius: 20px; background: var(--card); border: .6vh solid; }
+  .tribecol h2 { font-size: 5vh; margin-bottom: 2vh; } .tribecol div { font-size: 3.6vh; margin: .8vh 0; }
+  .bar { height: 2.2vh; background:#0007; border-radius: 99px; overflow:hidden; width: 50vw; margin: 3vh auto 0; } .bar > i { display:block; height:100%; background: var(--fire2); }
+  table.pts { border-collapse: collapse; font-size: 3vh; margin: 3vh auto 0; text-align:left; } table.pts td, table.pts th { padding: 1vh 1.6vw; } table.pts th { color: var(--sand); }
+  table.pts tr.top td { color: var(--fire2); font-weight: 800; }
+  #codecorner { position: fixed; right: 1.5vw; top: 1vh; font-size: 2.4vh; color: var(--sand); z-index: 5; letter-spacing: .15em; }
+  .crown { font-size: 16vh; }
+  .chip { display:inline-block; padding: .4vh 1vw; border-radius: 99px; font-size: 2.4vh; font-weight: 800; color:#111; }
 </style>
 </head>
 <body>
+<div id="codecorner"></div>
 <div id="screen-game" class="screen">
   <div class="viewwrap">
     <img id="mirror" alt="" />

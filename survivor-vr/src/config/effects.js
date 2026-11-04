@@ -90,6 +90,71 @@ export const EFFECTS = {
         feed: 'The next block is ENORMOUS!', action: { type: 'nextBlock', scale: 1.8 } },
     ],
   },
+
+  supply: {
+    help: [
+      { id: 'autoSort', label: 'Auto-sort items', weight: 3,
+        feed: 'Helpful hands sort a few items for you!', action: { type: 'autoSort', count: 3 } },
+      { id: 'hintBasket', label: 'Basket hint', weight: 3, duration: 12,
+        feed: 'The right basket glows...', mods: { hint: 1 } },
+      { id: 'bigBaskets', label: 'Bigger baskets', weight: 2, duration: 12,
+        feed: 'The baskets swell wide!', mods: { basketScale: 1.6 } },
+    ],
+    sabotage: [
+      { id: 'swapBaskets', label: 'Swap two baskets', weight: 3,
+        feed: 'Two baskets swap places!', action: { type: 'swapBaskets' } },
+      { id: 'scatterPile', label: 'Scatter the pile', weight: 2,
+        feed: 'The pile scatters in the wind!', action: { type: 'scatterPile' } },
+      { id: 'hideLabels', label: 'Hide the labels', weight: 3, duration: 10,
+        feed: 'The basket labels fade away...', mods: { hideLabels: 1 } },
+      { id: 'shrinkBaskets', label: 'Shrink baskets', weight: 2, duration: 10,
+        feed: 'The baskets shrink!', mods: { basketScale: 0.6 } },
+    ],
+  },
+
+  rope: {
+    help: [
+      { id: 'glowFree', label: 'Highlight free loops', weight: 3, duration: 12,
+        feed: 'The loose loops start to glow...', mods: { glowFree: 1 } },
+      { id: 'unhook', label: 'Unhook a loop', weight: 2,
+        feed: 'A loop slips off by itself!', action: { type: 'unhookLoop' } },
+      { id: 'looseRope', label: 'Loose rope', weight: 2, duration: 10,
+        feed: 'The rope goes slack!', mods: { pullScale: 0.5 } },
+    ],
+    sabotage: [
+      { id: 'reHook', label: 'Re-hook a loop', weight: 3,
+        feed: 'A loop snaps back onto the pegs!', action: { type: 'reHookLoop' } },
+      { id: 'tighten', label: 'Tighten a loop', weight: 3, duration: 8,
+        feed: 'A loop pulls tight and sticks!', action: { type: 'tightenLoop' } },
+      { id: 'shakeBoard', label: 'Shake the board', weight: 2, duration: 8,
+        feed: 'The whole board starts to shake!', mods: { jitter: 1 } },
+    ],
+  },
+
+  fire: {
+    help: [
+      { id: 'dryTinder', label: 'Dry tinder', weight: 3, duration: 15,
+        feed: 'The tinder is bone dry - fewer strikes needed!', mods: { strikeNeed: 0.5 } },
+      { id: 'tailwind', label: 'Steady breeze', weight: 3, duration: 10,
+        feed: 'A steady breeze fans the fire!', mods: { blowGain: 1.8 } },
+      { id: 'steadyHeat', label: 'Slow heat loss', weight: 2, duration: 12,
+        feed: 'The embers hold their heat...', mods: { heatDecay: 0.3 } },
+      { id: 'autoFeed', label: 'Auto-feed kindling', weight: 1,
+        feed: 'A bundle of kindling jumps onto the fire!', action: { type: 'autoFeed' } },
+    ],
+    sabotage: [
+      { id: 'dampTinder', label: 'Damp tinder', weight: 3, duration: 15,
+        feed: 'The tinder is damp - more strikes needed!', mods: { strikeNeed: 1.8 } },
+      { id: 'rain', label: 'Rain', weight: 3, duration: 10,
+        feed: 'RAIN! The fire hisses...', mods: { heatDecay: 2.5, blowGain: 0.7, rain: 1 } },
+      { id: 'gust', label: 'Cold gust', weight: 2,
+        feed: 'A cold gust knocks the heat down!', action: { type: 'gust', heatLoss: 0.4 } },
+      { id: 'scatterKindling', label: 'Scatter kindling', weight: 2,
+        feed: 'The kindling pile scatters!', action: { type: 'scatterKindling' } },
+      { id: 'weakSteel', label: 'Dull fire-steel', weight: 2, duration: 12,
+        feed: 'The fire-steel goes dull - strike harder!', mods: { strikeSpeed: 1.6 } },
+    ],
+  },
 };
 
 // Weighted random draw. `rng` is any () => [0,1) function.

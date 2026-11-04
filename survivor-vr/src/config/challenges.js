@@ -72,4 +72,56 @@ export const CHALLENGES = {
     desktopMaxTiltDeg: 14,
     fallBelow: 0.22,                 // block this far below tray = out
   },
+
+  // ----- team relay challenges (finish-based; each teammate runs the same challenge) -----
+  supply: {
+    timeLimit: 120,               // per player; timing out = DNF (adds the relay DNF penalty)
+    itemsPerType: 3,              // 4 types -> 12 items in the pile
+    basketWidth: 0.34,
+    basketSpacing: 0.42,
+    basketY: 0.95,
+    dropReach: 0.26,              // how close (m) to a basket mouth counts as "over it"
+    wrongPenalty: 2.0,            // seconds added for a wrong basket
+    xrGrabRadius: 0.16,
+  },
+  rope: {
+    timeLimit: 120,
+    loops: 8,
+    pegCols: 4,
+    pegRows: 2,
+    pegSpacingX: 0.22,
+    pegSpacingY: 0.30,
+    layerGap: 0.03,
+    pullDistance: 0.22,           // how far a free loop must be dragged off its pegs
+    blockedPenalty: 1.0,          // seconds added for yanking a covered loop
+    tightenSeconds: 8,
+  },
+
+  // ----- finale fire-making (hands-only; mic optional) -----
+  fire: {
+    timeLimit: 150,
+    strikesNeeded: 6,             // successful fire-steel strokes to light the tinder into an ember
+    strikeSpeedNdc: 3.2,          // desktop: mouse flick speed (screen-widths/s) that counts as a stroke
+    strikeSpeedXR: 1.7,           // XR: controller speed (m/s) that counts as a stroke
+    strikeCooldown: 0.22,
+    // blowing / fanning -> heat
+    fanSpeedNdc: [0.8, 4.0],      // desktop mouse speed range mapped to 0..1 fan strength
+    fanSpeedXR: [0.7, 2.6],       // controller speed (m/s) range mapped to 0..1
+    micThreshold: [0.04, 0.25],   // mic RMS range mapped to 0..1 (calibrated per device)
+    blowGain: 0.55,               // heat/s at full blow
+    heatDecay: 0.16,              // heat/s lost at rest (grows with each stage)
+    decayPerStage: 0.35,
+    heatFloor: 0.08,              // ember never fully dies
+    smotherPenalty: 0.5,          // heat multiplier when kindling is added too early
+    // kindling stages: heat required to add it, and the flame size it unlocks
+    kindling: [
+      { name: 'twigs', minHeat: 0.30, size: 0.30, count: 4 },
+      { name: 'sticks', minHeat: 0.50, size: 0.65, count: 3 },
+      { name: 'logs', minHeat: 0.70, size: 1.00, count: 2 },
+    ],
+    fullHeat: 0.8,                // heat at which the flame reaches the stage's full size
+    finishSize: 0.95,             // flame size needed after the last kindling stage
+    flameGrow: 0.9,               // how fast the flame size chases its target (1/s)
+    feedRadius: 0.28,
+  },
 };

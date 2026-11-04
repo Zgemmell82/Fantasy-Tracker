@@ -14,6 +14,7 @@ export class Hud {
     this.data = { title: '', timer: '', line: '', big: '' };
     this.toastText = ''; this.toastUntil = 0; this.toastKind = 'help';
     this._sig = ''; this._last = 0;
+    this.timerFn = null;     // e.g. relay: show the TRIBE clock instead of the runner's own
   }
   place(x, y, z, scale = 1) { this.mesh.position.set(x, y, z); this.mesh.scale.setScalar(scale); this.mesh.lookAt(0, 1.6, 0); }
   set(d) { Object.assign(this.data, d); }
@@ -23,7 +24,8 @@ export class Hud {
     if (now - this._last < 90) return;
     this._last = now;
     const showToast = now < this.toastUntil;
-    const sig = JSON.stringify(this.data) + (showToast ? this.toastText : '');
+    const timerText = this.timerFn ? this.timerFn() : null;
+    const sig = JSON.stringify(this.data) + (showToast ? this.toastText : '') + timerText;
     if (sig === this._sig) return;
     this._sig = sig;
     const g = this.canvas.getContext('2d'), w = 768, h = 384;
@@ -34,7 +36,7 @@ export class Hud {
     g.fillStyle = '#e9c987'; g.font = 'bold 34px Trebuchet MS, sans-serif';
     g.fillText(this.data.title || '', w / 2, 64);
     g.fillStyle = '#ffcc4d'; g.font = 'bold 120px Trebuchet MS, sans-serif';
-    g.fillText(this.data.big || this.data.timer || '', w / 2, 170);
+    g.fillText(this.data.big || timerText || this.data.timer || '', w / 2, 170);
     g.fillStyle = '#fdf3dc'; g.font = '36px Trebuchet MS, sans-serif';
     g.fillText(this.data.line || '', w / 2, 250);
     if (showToast) {

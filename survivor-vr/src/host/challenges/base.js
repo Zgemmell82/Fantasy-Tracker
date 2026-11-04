@@ -62,7 +62,8 @@ export class Challenge {
 
   // ----- HUD/TV -----
   /** {label, value (seconds), mode:'up'|'down'} */
-  getTimer() { return { label: 'TIME', value: this.t, mode: 'up' }; }
+  elapsed() { return Math.max(0, this.t - this.timeAdjust); }
+  getTimer() { return { label: 'TIME', value: this.elapsed(), mode: 'up' }; }
   /** short progress line for HUD/TV */
   getProgress() { return ''; }
   /** desktop-only extras (crosshair, charge bars) */

@@ -1,116 +1,123 @@
-// DOM host panel: players, challenge picker, round controls and the debug panel.
+// DOM host panel: lobby, challenge picker, "continue" controls and the debug panel.
 import { GAME } from '../config/game.js';
-import { SCORING } from '../config/scoring.js';
-import { CHALLENGE_LIST } from '../config/meta.js';
+import { CHALLENGE_META } from '../config/meta.js';
+import { createDebug, JUMPS } from './debug.js';
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-const SAMPLE_VOTES = [
-  'You have been coasting all game. Time to go.', 'Too strong, too smooth. Gotta cut the threat!',
-  'I just do not trust you. Sorry.', 'Your shady alliance talk was obvious. Bye!', 'Nothing personal, it is just strategy.',
-  'You sabotaged me and I know it.', 'Pretty sure you are the final-three goat. Cut early.',
-];
+// what the host's Continue button does in each phase
+const CONTINUE = {
+  tribes: 'Continue to challenge pick', roundResults: '🔥 Go to Tribal Council', tie: 'Continue (revote / next tie-break)', tribalResult: 'Continue',
+  merge: 'Continue', turnResult: 'Next ▶', finaleIntro: 'Start the finale challenges', finaleScores: 'Next ▶', finaleImmunity: 'Start fire-making',
+  fireResult: 'Finalist pitches', pitch: 'Next / end pitch', voting: 'Read the votes ▶', readout: 'Next vote ▶', unanimous: 'Declare deadlock → draw', draw: 'Skip draw reveal',
+  jury: 'Reveal jury votes', juryReveal: 'Next reveal', turnReady: '▶ Begin run (3-2-1)', handoff: 'Skip handoff wait',
+};
 
-export function initPanel({ game, api }) {
+export function initPanel({ game, api, mic, code }) {
+  const D = createDebug(game, { onJump: () => render() });
+  window.__debug = D;
   $('#collapse').onclick = () => $('#panel').classList.toggle('collapsed');
   const playersEl = $('#players'), flowEl = $('#flow'), debugEl = $('#debug'), statusEl = $('#status');
+  let jumpChoice = 'lobby', jumpN = 12;
+
+  const tribeChip = (p) => (p.tribe ? `<span class="pill" style="background:${GAME.tribes.find((t) => t.id === p.tribe).color};color:#111">${p.tribe}</span>` : '');
 
   function render() {
     const g = game;
-    const challengeName = CHALLENGE_LIST.find((c) => c.id === g.challengeId)?.name || '-';
-    statusEl.innerHTML = `Phase: <span class="pill">${g.phase}</span> Round ${g.round || '-'} · ${esc(challengeName)}
-      ${g.headsetId ? `<br>In headset: <b>${esc(g.player(g.headsetId)?.name)}</b> (turn ${g.turnIndex + 1}/${g.order.length})` : ''}
-      <br>Link: <span class="pill">${api.netMode()}</span> TV: <span class="pill">${api.tvAlive() ? 'connected' : 'not seen'}</span>`;
+    const meta = CHALLENGE_META[g.challengeId];
+    const mode = !g.started ? 'lobby' : g.episodeType === 'finale' ? 'FINALE' : g.twoTribes && !g.merged ? 'two tribes' : g.twoTribes ? 'merged' : 'one tribe';
+    statusEl.innerHTML = `Room code <span class="pill" style="font-size:18px;font-weight:800;letter-spacing:.2em">${code}</span>
+      <br>Phase: <span class="pill">${g.phase}</span> · ${mode} · ep ${g.episode || '-'} ${meta ? '· ' + esc(meta.name) : ''}
+      ${g.headsetId ? `<br>In headset: <b>${esc(g.name(g.headsetId))}</b>${g.run?.relay ? ` · tribe ${g.run.group} clock ${g.relayTotal().toFixed(1)}s` : ''}` : ''}
+      <br>Link: <span class="pill">${api.netMode()}</span> TV: <span class="pill">${api.tvAlive() ? 'connected' : 'not seen'}</span> Mic: <span class="pill">${esc(mic.status)}</span>`;
 
     // players
-    const editable = g.phase === 'lobby' || g.phase === 'roundEnd';
+    const lobby = g.phase === 'lobby';
     playersEl.innerHTML = g.players.map((p) => `
-      <div class="row"><span class="dot" style="background:${p.color}"></span><b>${esc(p.name)}</b>
-        ${p.bot ? '<span class="pill">bot</span>' : '<span class="pill">phone</span>'}
-        ${g.immunityId === p.id ? '🛡️' : ''}${p.eliminated ? '💀' : ''}
-        ${editable ? `<button class="btn alt sm" data-rm="${p.id}">✕</button>` : ''}</div>`).join('') || '<span class="muted">No players yet - open phone.html on phones, or add bots.</span>';
-    playersEl.insertAdjacentHTML('beforeend', `<div class="row"><button class="btn alt sm" id="addbot" ${editable && g.players.length < GAME.maxPlayers ? '' : 'disabled'}>+ Bot</button>
-      <span class="muted">${g.active.length} players (need ${GAME.minPlayers}-${GAME.maxPlayers})</span></div>`);
+      <div class="row"><span class="dot" style="background:${p.color}"></span><b style="${p.status !== 'active' ? 'opacity:.5' : ''}">${esc(p.name)}</b>
+        ${tribeChip(p)}${p.bot ? '<span class="pill">bot</span>' : '<span class="pill">phone</span>'}
+        ${g.immunityId === p.id ? '🛡️' : ''}${p.status === 'juror' ? '<span class="pill">juror</span>' : p.status === 'out' ? '<span class="pill">out</span>' : ''}
+        ${g.winnerId === p.id ? '👑' : ''}
+        ${lobby ? `<button class="btn alt sm" data-rm="${p.id}">✕</button>` : ''}</div>`).join('') || '<span class="muted">No players yet - phones join with the room code, or add bots.</span>';
+    playersEl.insertAdjacentHTML('beforeend', `<div class="row"><button class="btn alt sm" id="addbot" ${lobby && g.players.length < GAME.maxPlayers ? '' : 'disabled'}>+ Bot</button>
+      <button class="btn alt sm" id="add5" ${lobby ? '' : 'disabled'}>+ 5 Bots</button>
+      <span class="muted">${g.players.length} players (${GAME.minPlayers}-${GAME.maxPlayers}; ${GAME.twoTribeMinPlayers}+ = two tribes)</span></div>`);
     $('#addbot').onclick = () => g.addBot();
+    $('#add5').onclick = () => { for (let i = 0; i < 5; i++) g.addBot(); };
     playersEl.querySelectorAll('[data-rm]').forEach((b) => (b.onclick = () => g.removePlayer(b.dataset.rm)));
 
-    // flow controls
+    // flow
     let h = '';
-    if (g.phase === 'lobby' || g.phase === 'roundEnd') {
-      if (g.phase === 'roundEnd') h += roundEndSummary();
-      h += `<h3>Challenge picker</h3><div class="cards">${CHALLENGE_LIST.map((c) => `
-        <button class="card" data-ch="${c.id}" ${g.canStart() ? '' : 'disabled'}><b>${c.icon} ${c.name}</b><small>${esc(c.blurb)}</small></button>`).join('')}</div>`;
-      if (!g.canStart()) h += `<div class="muted">Add ${GAME.minPlayers}-${GAME.maxPlayers} players to start a round.</div>`;
-    } else {
-      h += `<h3>Round ${g.round}: ${esc(challengeName)}</h3>`;
-      if (g.phase === 'turnReady') h += `<div class="row"><b>${esc(g.player(g.headsetId)?.name)}</b> puts on the headset.</div>
-        <div class="row"><button class="btn" id="begin">▶ Begin run (3-2-1)</button></div>
-        <div class="muted">Or press the READY sign in the scene / Enter.</div>`;
-      if (g.phase === 'countdown' || g.phase === 'running') h += `<div class="row muted">Taps used: ${g.order.length - 1 - g.tapsLeft()}/${g.order.length - 1}</div>`;
-      if (g.phase === 'turnResult') h += `<div class="row"><button class="btn" id="nextturn">Next ▶</button></div>`;
-      if (g.phase === 'roundResults') h += `<div class="row"><button class="btn" id="tribal">🔥 Tribal Council</button></div>`;
-      if (g.phase === 'voting') h += `<div class="row muted">Votes in: ${g.active.filter((p) => g.votes[p.id]).length}/${g.active.length}</div>
-        <div class="row"><button class="btn" id="readout">Read the votes ▶</button></div>`;
-      if (g.phase === 'readout') h += `<div class="row"><button class="btn" id="nextvote">Next vote ▶</button></div>`;
-      h += `<div class="row"><button class="btn alt sm" id="abort">Abort round</button></div>`;
+    if (g.phase === 'lobby') {
+      h += `<div class="row"><button class="btn" id="start" ${g.canStart() ? '' : 'disabled'}>▶ Start game (${g.players.length >= GAME.twoTribeMinPlayers ? 'two tribes' : g.players.length <= GAME.finaleAt ? 'straight to finale' : 'one tribe'})</button></div>`;
+    } else if (g.phase === 'tribes') {
+      for (const t of GAME.tribes) h += `<div class="card" style="margin:6px 0;border-color:${t.color}"><b style="color:${t.color}">${t.name} tribe</b> ${g.members(t.id).map((id) => esc(g.name(id))).join(', ')}</div>`;
+    } else if (g.phase === 'picker') {
+      const team = g.twoTribes && !g.merged;
+      h += `<h3>${team ? 'Pick a TEAM relay challenge' : 'Pick an individual challenge'}</h3><div class="cards">${g.pickable().map((id) => { const c = CHALLENGE_META[id]; return `
+        <button class="card" data-ch="${id}"><b>${c.icon} ${c.name}</b><small>${esc(c.blurb)}</small></button>`; }).join('')}
+        <button class="card" id="rand"><b>🎲 Random</b><small>Let fate pick</small></button></div>`;
     }
+    if (g.phase === 'roundResults' && g.team) h += `<div class="card" style="margin:6px 0">Losing tribe: <b>${g.team.losing}</b> → tribal. Winners ${g.team.winning} are safe.</div>`;
+    if (g.phase === 'roundResults' && g.immunityId) h += `<div class="card" style="margin:6px 0">🛡️ Immunity: <b>${esc(g.name(g.immunityId))}</b></div>`;
+    if (g.phase === 'tribalResult') h += `<div class="card" style="margin:6px 0">Voted out: <b>${esc(g.name(g.tribal.result.eliminated))}</b> (${g.tribal.result.how})</div>`;
+    if (g.phase === 'voting') h += `<div class="row muted">${g.tribal.stage.toUpperCase()}: votes in ${Object.keys(g.tribal.votes).length}/${g.tribal.voters.length}</div>`;
+    if (g.phase === 'unanimous') h += `<div class="row muted">Picks: ${Object.keys(g.tribal.picks).length}/${g.tribal.voters2.length} · ${Math.ceil(g.tribal.deadline)}s left</div>`;
+    if (g.phase === 'jury') h += `<div class="row muted">Jury votes in ${Object.keys(g.jury.votes).length}/${g.jury.jurors.length}</div>`;
+    if (g.phase === 'running') h += `<div class="row muted">Taps used: ${g.tappers().length - g.tapsLeft()}/${g.tappers().length}</div>`;
+    if (CONTINUE[g.phase]) h += `<div class="row"><button class="btn" id="cont">${CONTINUE[g.phase]}</button></div>`;
+    if (g.started) h += `<div class="row"><button class="btn alt sm" id="abort">Abort episode</button><button class="btn alt sm" id="reset">New game</button></div>`;
+    h += `<div class="row"><button class="btn alt sm" id="mic">${mic.enabled ? '🎤 Mic on (click to turn off)' : '🎤 Enable mic for blowing (fire challenge)'}</button></div>`;
     flowEl.innerHTML = h;
-    flowEl.querySelectorAll('[data-ch]').forEach((b) => (b.onclick = () => { const r = g.startRound(b.dataset.ch); if (!r.ok) alert(r.reason); }));
     const on = (id, fn) => { const e = $('#' + id); if (e) e.onclick = fn; };
-    on('begin', () => g.beginTurn()); on('nextturn', () => g.skipTurnResult()); on('tribal', () => g.startVoting());
-    on('readout', () => g.startReadout()); on('nextvote', () => g.nextReadout()); on('abort', () => api.abortRound());
-
+    on('start', () => { const r = g.startGame(); if (!r.ok) alert(r.reason); });
+    on('cont', () => g.next());
+    on('abort', () => api.abortEpisode());
+    on('reset', () => { if (confirm('Start a new game? Keeps the players.')) g.resetGame(), g.changed(); });
+    on('mic', async () => { if (mic.enabled) mic.disable(); else await mic.enable(); render(); });
+    on('rand', () => { const ids = g.pickable(); g.startEpisode(ids[Math.floor(Math.random() * ids.length)]); });
+    flowEl.querySelectorAll('[data-ch]').forEach((b) => (b.onclick = () => { const r = g.startEpisode(b.dataset.ch); if (!r.ok) alert(r.reason); }));
     renderDebug();
-  }
-
-  function roundEndSummary() {
-    const g = game;
-    const nm = (id) => esc(g.player(id)?.name || '?');
-    return `<div class="card" style="margin:8px 0"><b>Round ${g.round} over</b>
-      🛡️ Immunity: ${nm(g.immunityId)}<br>
-      ${g.votedOut.length ? `🔥 Voted out: ${g.votedOut.map(nm).join(', ')}${GAME.eliminateVotedOut ? '' : ' (stays in - prototype)'}` : '🤝 Tie - nobody voted out'}</div>
-      <div class="row"><button class="btn" id="nextround">Next round ▶</button></div>`;
   }
 
   function renderDebug() {
     const g = game;
-    let h = `<div class="muted" style="margin:6px 0">Simulate phone players without a phone. Real phones use <code>/phone.html</code> (which also has its own debug drawer).</div>`;
-    if (g.players.length) {
+    let h = `<div class="muted" style="margin:6px 0">Simulate phones and skip ahead. Real phones use <code>/phone.html</code> + the room code.</div>`;
+    h += `<div class="row"><select id="jumpsel">${JUMPS.map(([k, l]) => `<option value="${k}" ${k === jumpChoice ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <input id="jumpn" type="number" min="3" max="${GAME.maxPlayers}" value="${jumpN}" style="width:52px" title="players"><button class="btn sm" id="jump">Jump ▶</button></div>`;
+    const tappers = g.tappers ? g.tappers() : [];
+    if (g.phase === 'running') {
       h += g.players.map((p) => {
-        const tapped = g.taps[p.id];
-        const can = g.phase === 'running' && p.id !== g.headsetId && !tapped;
+        const can = tappers.includes(p.id) && !g.taps[p.id];
         return `<div class="row"><span class="dot" style="background:${p.color}"></span>${esc(p.name)}
           <button class="btn sm" data-tap="help:${p.id}" ${can ? '' : 'disabled'} style="background:var(--help)">Help</button>
-          <button class="btn sm" data-tap="sabotage:${p.id}" ${can ? '' : 'disabled'} style="background:var(--sab)">Sabotage</button>
-          ${tapped ? `<span class="pill">tapped</span>` : ''}${g.phase === 'voting' && g.votes[p.id] ? '<span class="pill">voted</span>' : ''}</div>`;
+          <button class="btn sm" data-tap="sabotage:${p.id}" ${can ? '' : 'disabled'} style="background:var(--sab)">Sab</button>
+          ${g.taps[p.id] ? '<span class="pill">tapped</span>' : tappers.includes(p.id) ? '' : '<span class="pill">no tap</span>'}</div>`;
       }).join('');
     }
-    h += `<div class="row">
-      <button class="btn alt sm" id="dbgresult" ${['running', 'countdown', 'turnReady'].includes(g.phase) ? '' : 'disabled'}>Skip run → random result</button>
-      <button class="btn alt sm" id="dbgvote" ${g.phase === 'voting' ? '' : 'disabled'}>Bots vote</button>
-      <button class="btn alt sm" id="dbgtapall" ${g.phase === 'running' ? '' : 'disabled'}>All tap (random)</button></div>`;
+    const b = (id, label, en = true) => `<button class="btn alt sm" id="${id}" ${en ? '' : 'disabled'}>${label}</button>`;
+    h += `<div class="row">${b('d-skip', 'Skip run → random', !!g.run && ['turnReady', 'countdown', 'running', 'handoff'].includes(g.phase))}
+      ${b('d-runall', 'Run all remaining', !!g.run && ['turnReady', 'countdown', 'running', 'handoff', 'turnResult'].includes(g.phase))}
+      ${b('d-tap', 'Bots tap', g.phase === 'running')}</div>
+      <div class="row">${b('d-vote', 'Bots vote', g.phase === 'voting')} ${b('d-tie', 'Bots vote (force tie)', g.phase === 'voting')}
+      ${b('d-skiprd', 'Skip readout', g.phase === 'voting' || g.phase === 'readout')}</div>
+      <div class="row">${b('d-agree', 'Bots agree (unanimous)', g.phase === 'unanimous')} ${b('d-split', 'Bots disagree', g.phase === 'unanimous')}
+      ${b('d-jury', 'Bots jury vote', g.phase === 'jury')}</div>`;
     debugEl.innerHTML = h;
-    debugEl.querySelectorAll('[data-tap]').forEach((b) => (b.onclick = () => { const [k, id] = b.dataset.tap.split(':'); g.tap(id, k); }));
     const on = (id, fn) => { const e = $('#' + id); if (e) e.onclick = fn; };
-    on('dbgresult', () => api.fakeResult());
-    on('dbgvote', () => {
-      for (const p of g.active) {
-        if (g.votes[p.id]) continue;
-        const targets = g.votableTargets(p.id);
-        if (!targets.length) continue;
-        g.submitVote(p.id, targets[Math.floor(Math.random() * targets.length)].id, SAMPLE_VOTES[Math.floor(Math.random() * SAMPLE_VOTES.length)]);
-      }
-    });
-    on('dbgtapall', () => {
-      for (const p of g.players) if (p.id !== g.headsetId && !g.taps[p.id]) g.tap(p.id, Math.random() < 0.5 ? 'help' : 'sabotage');
-    });
-    on('nextround', () => g.nextRound());
+    $('#jumpsel').onchange = (e) => { jumpChoice = e.target.value; };
+    $('#jumpn').onchange = (e) => { jumpN = +e.target.value; };
+    on('jump', () => { api.abortEpisode(); D.jump(jumpChoice, jumpN); });
+    debugEl.querySelectorAll('[data-tap]').forEach((bt) => (bt.onclick = () => { const [k, id] = bt.dataset.tap.split(':'); g.tap(id, k); }));
+    on('d-skip', () => api.fakeResult()); on('d-runall', () => { g.simulating = true; D.runAll(); g.simulating = false; g.reprepare(); g.changed(); });
+    on('d-tap', () => D.botsTap()); on('d-vote', () => D.botsVote('random')); on('d-tie', () => D.botsVote('tie'));
+    on('d-skiprd', () => g.skipReadout()); on('d-agree', () => D.botsPick('agree')); on('d-split', () => D.botsPick('split')); on('d-jury', () => D.botsJury());
   }
 
   let pending = false;
   const schedule = () => { if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; render(); }); } };
   render();
-  setInterval(render, 1500);
+  setInterval(() => { if (!document.activeElement || !['SELECT', 'INPUT'].includes(document.activeElement.tagName)) render(); }, 1500);
   return { render: schedule };
 }

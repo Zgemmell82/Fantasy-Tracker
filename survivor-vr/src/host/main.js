@@ -8,20 +8,28 @@ import { Ui3D } from './ui3d.js';
 import { buildWorld } from './world.js';
 import { Game } from './game.js';
 import { initPanel } from './panel.js';
+import { MicInput } from './mic.js';
 import { CHALLENGE_CLASSES } from './challenges/index.js';
 import { CHALLENGES } from '../config/challenges.js';
-import { SCORING } from '../config/scoring.js';
+import { SCORING, fmtSeconds } from '../config/scoring.js';
 import { GAME } from '../config/game.js';
 import { connect } from '../shared/net.js';
-import { mulberry32, clamp } from '../shared/util.js';
+import { mulberry32 } from '../shared/util.js';
 
 const $ = (s) => document.querySelector(s);
+
+// ---------- room code ----------
+const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+function makeCode() { return Array.from({ length: GAME.roomCodeLength }, () => ALPHABET[Math.floor(Math.random() * ALPHABET.length)]).join(''); }
+let code = (new URLSearchParams(location.search).get('room') || sessionStorage.getItem('svr-code') || makeCode()).toUpperCase();
+try { sessionStorage.setItem('svr-code', code); } catch { /* ignore */ }
+
 const stage = new Stage($('#stage'));
 const world = buildWorld(stage.world);
 const hands = new Hands(stage);
 const hud = new Hud(stage.world);
 const readyUi = new Ui3D(stage.world);
-let readyBtn = null;
+const mic = new MicInput();
 let current = null;           // active Challenge instance
 let lastTick = 0, tvSeen = 0;
 let ui = null;
@@ -35,8 +43,8 @@ const runner = {
     hands.originY = stage.world.position.y;
     const seed = (info.round * 7919 + info.turnIndex * 104729 + (Math.random() * 1e6 | 0)) >>> 0;
     current = new Cls({
-      stage, hands, hud,
-      config: CHALLENGES[info.challengeId],
+      stage, hands, hud, mic,
+      config: { ...CHALLENGES[info.challengeId], ...(info.cfg || {}) },
       rng: mulberry32(seed),
       finish: (res) => game.finishTurn(res),
       say: (text, kind) => {
@@ -45,8 +53,9 @@ const runner = {
       },
     });
     current.setup({ ...info, seed });
-    hud.set({ title: Cls.meta.name.toUpperCase(), timer: '', big: 'READY?', line: game.player(info.playerId)?.name || '' });
-    readyBtn = readyUi.addButton({
+    hud.timerFn = info.relay ? () => fmtSeconds(game.relayTotal()).replace('s', '') : null;
+    hud.set({ title: Cls.meta.name.toUpperCase() + (info.relay ? ' · TRIBE ' + info.group : ''), timer: '', big: 'READY?', line: game.player(info.playerId)?.name || '' });
+    readyUi.addButton({
       text: 'READY!', sub: 'point + click / trigger', pos: current.readyPos || new THREE.Vector3(0, 1.75, -1.2), width: 0.6, height: 0.26,
       onSelect: () => game.beginTurn(),
     });
@@ -54,7 +63,7 @@ const runner = {
     $('#help').textContent = Cls.meta.desktopHelp;
   },
   start() {
-    readyUi.clear(); readyBtn = null;
+    readyUi.clear();
     current?.ui.clear();
     hands.showLasers(false);
     stage.calibrateHeight(); hands.originY = stage.world.position.y;
@@ -66,23 +75,24 @@ const runner = {
 };
 
 function disposeCurrent() {
-  readyUi.clear(); readyBtn = null;
+  readyUi.clear();
   if (current) { current.dispose(); current = null; }
 }
 
 const game = new Game(runner);
+game.code = code;
 window.__game = game;     // handy for debugging / automated tests
 window.__hands = hands; window.__stage = stage;
 Object.defineProperty(window, '__challenge', { get: () => current });
 
-// ---------- networking ----------
+// ---------- networking (room = code) ----------
 const net = connect({
-  role: 'host',
-  onMessage: (m, from) => handle(m, from),
-  onStatus: () => ui.render(),
+  role: 'host', room: code,
+  onMessage: (m) => handle(m),
+  onStatus: () => ui?.render(),
 });
 
-function handle(m, from) {
+function handle(m) {
   switch (m.t) {
     case 'hello': broadcastState(); break;
     case 'tv-ping': tvSeen = performance.now(); break;
@@ -92,16 +102,10 @@ function handle(m, from) {
       break;
     }
     case 'leave': game.removePlayer(m.pid); break;
-    case 'tap': {
-      const r = game.tap(m.pid, m.kind);
-      net.send({ t: 'tapResult', pid: m.pid, ok: r.ok, reason: r.reason });
-      break;
-    }
-    case 'vote': {
-      const r = game.submitVote(m.pid, m.target, m.message);
-      net.send({ t: 'voteResult', pid: m.pid, ok: r.ok, reason: r.reason });
-      break;
-    }
+    case 'tap': { const r = game.tap(m.pid, m.kind); net.send({ t: 'tapResult', pid: m.pid, ok: r.ok, reason: r.reason }); break; }
+    case 'vote': { const r = game.submitVote(m.pid, m.target, m.message); net.send({ t: 'voteResult', pid: m.pid, ok: r.ok, reason: r.reason }); break; }
+    case 'pick': { const r = game.unanimousPick(m.pid, m.target); net.send({ t: 'voteResult', pid: m.pid, ok: r.ok, reason: r.reason }); break; }
+    case 'jury': { const r = game.submitJuryVote(m.pid, m.target); net.send({ t: 'voteResult', pid: m.pid, ok: r.ok, reason: r.reason }); break; }
   }
 }
 
@@ -120,19 +124,17 @@ stage.onMirror = (dataUrl) => {
 
 // ---------- panel ----------
 ui = initPanel({
-  game,
+  game, mic, code,
   api: {
     netMode: () => net.mode,
     tvAlive: () => performance.now() - tvSeen < 8000,
-    abortRound: () => {
-      disposeCurrent();
-      game.phase = 'lobby'; game.headsetId = null; game.changed();
-    },
+    abortEpisode: () => { disposeCurrent(); game.abortEpisode(); },
     fakeResult: () => {
-      const rule = SCORING[game.challengeId];
-      const v = rule.better === 'lower' ? 18 + Math.random() * 50 : 8 + Math.random() * 60;
+      if (!game.run) return;
       if (current) { current.finished = true; current.running = false; }
-      game.phase = 'running';
+      const id = game.run.challengeId, rule = SCORING[id];
+      const v = rule.better === 'lower' ? 18 + Math.random() * 50 : 8 + Math.random() * 60;
+      if (game.phase === 'turnReady' || game.phase === 'countdown' || game.phase === 'handoff') game.phase = 'running';
       game.finishTurn({ value: +v.toFixed(2), dnf: false, progress: 5 });
     },
   },
@@ -142,10 +144,10 @@ ui = initPanel({
 fetch('/__info').then((r) => r.json()).then((info) => {
   const port = location.port || info.port;
   const hosts = info.addresses.length ? info.addresses : [location.hostname];
-  const lines = hosts.map((a) => `Phones: <a href="http://${a}:${port}/phone.html" target="_blank">http://${a}:${port}/phone.html</a><br>TV: <a href="http://${a}:${port}/tv.html" target="_blank">http://${a}:${port}/tv.html</a>`);
-  $('#links').innerHTML = lines.join('<hr>');
+  const lines = hosts.map((a) => `Phones: <a href="http://${a}:${port}/phone.html?room=${code}" target="_blank">http://${a}:${port}/phone.html</a> (code <b>${code}</b>)<br>TV: <a href="http://${a}:${port}/tv.html?room=${code}" target="_blank">http://${a}:${port}/tv.html?room=${code}</a>`);
+  $('#links').innerHTML = lines.join('<hr>') + `<br>On this PC: <a href="/tv.html?room=${code}" target="_blank">open TV</a> · <a href="/phone.html?room=${code}&debug=1" target="_blank">open phone (debug)</a>`;
 }).catch(() => {
-  $('#links').innerHTML = `Phones: <a href="phone.html" target="_blank">phone.html</a> · TV: <a href="tv.html" target="_blank">tv.html</a><br>(no relay: tabs in this browser still sync via BroadcastChannel)`;
+  $('#links').innerHTML = `<a href="tv.html?room=${code}" target="_blank">TV</a> · <a href="phone.html?room=${code}&debug=1" target="_blank">phone</a> (no relay: tabs in this browser still sync via BroadcastChannel)`;
 });
 
 // VR button
@@ -165,7 +167,7 @@ stage.frameCbs.push((dt, now) => {
   game.update(dt);
 
   const rays = hands.pointerRays();
-  if (game.phase === 'turnReady') {
+  if (game.phase === 'turnReady' || game.phase === 'handoff') {
     readyUi.update(rays);
     current?.ui.update(rays);
     if (hands.keysDown.has('enter') && current?.isReady()) game.beginTurn();
@@ -177,9 +179,12 @@ stage.frameCbs.push((dt, now) => {
 
   // overlay text (desktop)
   const p = game.player(game.headsetId);
-  banner.style.display = p ? 'block' : 'none';
-  if (p) banner.innerHTML = `<span class="dot" style="background:${p.color}"></span>${p.name} is in the headset` +
-    (current && game.phase === 'running' ? ` · ${current.getProgress()}` : '');
+  const inRun = p && ['turnReady', 'countdown', 'running', 'handoff', 'turnResult'].includes(game.phase);
+  banner.style.display = inRun ? 'block' : 'none';
+  if (inRun) {
+    const tribe = game.run?.relay ? ` · tribe ${game.run.group} ${fmtSeconds(game.relayTotal())}` : '';
+    banner.innerHTML = `<span class="dot" style="background:${p.color}"></span>${p.name} is in the headset${tribe}` + (current && game.phase === 'running' ? ` · ${current.getProgress()}` : '');
+  }
   cd.style.display = game.phase === 'countdown' ? 'flex' : 'none';
   cd.textContent = game.countdown || 'GO';
   if (game.phase === 'countdown') hud.set({ big: String(game.countdown || 'GO') });
@@ -187,8 +192,13 @@ stage.frameCbs.push((dt, now) => {
   // 5 Hz tick to TV
   if (now - lastTick > 200) {
     lastTick = now;
-    if (current && (game.phase === 'running' || game.phase === 'countdown' || game.phase === 'turnResult')) {
-      net.send({ t: 'tick', timer: current.getTimer(), progress: current.getProgress() }, 'tv');
+    if (current && ['running', 'countdown', 'turnResult', 'handoff'].includes(game.phase)) {
+      const relay = game.run?.relay;
+      net.send({
+        t: 'tick',
+        timer: relay ? { label: `TRIBE ${game.run.group}`, value: game.relayTotal(), mode: 'up' } : current.getTimer(),
+        progress: current.getProgress(),
+      }, 'tv');
     }
   }
 });

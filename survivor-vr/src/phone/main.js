@@ -1,8 +1,8 @@
 // Phone controller. One real phone = one player. The debug drawer (gear button) lets a single
-// tab pose as several fake players so the whole loop can be tested alone.
+// tab pose as several fake players so every phase can be tested alone.
 import { connect } from '../shared/net.js';
 import { GAME } from '../config/game.js';
-import { CHALLENGE_LIST } from '../config/meta.js';
+import { CHALLENGE_META } from '../config/meta.js';
 import { countSentences, uid } from '../shared/util.js';
 
 const $ = (s) => document.querySelector(s);
@@ -12,29 +12,34 @@ const store = {
   set(k, v) { try { sessionStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } },
 };
 
-// identities this tab can act as: the real player + any fake ones from the debug panel
 let ids = store.get('ids', null);
 if (!ids) { ids = [{ pid: 'p_' + uid(), name: '', fake: false }]; store.set('ids', ids); }
 let meIdx = Math.min(store.get('me', 0), ids.length - 1);
 const me = () => ids[meIdx];
-let S = null;
+let S = null, net = null, room = '';
 let joinError = '';
-let voteDraft = { target: null, message: '' };
+let voteDraft = { key: '', target: null, message: '' };
+let myPick = null;
 let toastTimer = null;
-const fakeNames = ['Coconut', 'Mango', 'Tiki', 'Parrot', 'Lava', 'Reef'];
+const fakeNames = GAME.botNames;
 
-const net = connect({
-  role: 'phone',
-  onMessage: (m) => {
-    if (m.t === 'state') { S = m.s; render(); renderDbg(); }
-    else if (m.pid && m.pid === me().pid) {
-      if (m.t === 'joinResult' && !m.ok) { joinError = m.reason || 'Could not join.'; render(); }
-      if ((m.t === 'tapResult' || m.t === 'voteResult') && !m.ok) toast(m.reason || 'Not allowed');
-    }
-  },
-});
-setInterval(() => { if (!S) net.send({ t: 'hello' }); }, 1500);
-setTimeout(() => net.send({ t: 'hello' }), 300);
+function connectRoom(code) {
+  room = code.toUpperCase().trim(); store.set('room', room);
+  net?.close(); S = null;
+  net = connect({
+    role: 'phone', room,
+    onMessage: (m) => {
+      if (m.t === 'state') { S = m.s; render(); renderDbg(); }
+      else if (m.pid && m.pid === me().pid) {
+        if (m.t === 'joinResult' && !m.ok) { joinError = m.reason || 'Could not join.'; lastKey = ''; render(); }
+        if ((m.t === 'tapResult' || m.t === 'voteResult') && !m.ok) toast(m.reason || 'Not allowed');
+      }
+    },
+  });
+  setTimeout(() => net.send({ t: 'hello' }), 300);
+  render();
+}
+setInterval(() => { if (net && !S) net.send({ t: 'hello' }); }, 1500);
 
 function toast(t) {
   const el = $('#toast'); el.textContent = t; el.style.display = 'block';
@@ -42,139 +47,138 @@ function toast(t) {
 }
 const playerOf = (id) => S?.players.find((p) => p.id === id);
 const nameOf = (id) => playerOf(id)?.name || '?';
+const tribeOf = (tid) => S?.tribes.find((t) => t.id === tid);
+const send = (m) => net?.send(m);
 
-function join(name) {
-  me().name = name; store.set('ids', ids); joinError = '';
-  net.send({ t: 'join', pid: me().pid, name });
-}
-function tap(kind) { net.send({ t: 'tap', pid: me().pid, kind }); }
-function vote() {
-  net.send({ t: 'vote', pid: me().pid, target: voteDraft.target, message: voteDraft.message });
-}
+function join(name) { me().name = name; store.set('ids', ids); joinError = ''; send({ t: 'join', pid: me().pid, name }); }
 
 // ---------- rendering ----------
 let lastKey = '';
 function render() {
   const app = $('#app');
-  if (!S) { app.innerHTML = `<div class="card center"><h2>🌴 Connecting…</h2><div class="muted">Looking for the host page.</div></div>`; return; }
-  const mine = playerOf(me().pid);
-  // keep a draft vote across re-renders; only rebuild DOM when the visible screen changes
-  const key = [S.phase, S.round, S.headsetId, mine ? 'in' : 'out', S.taps?.[me().pid] || '', S.voted?.includes(me().pid), S.immunityId, meIdx, joinError, S.readout?.index, S.votedOut?.join(), S.tapsLeft === 0].join('|');
+  if (!room) {
+    app.innerHTML = `<div class="card"><h2>🌴 Survivor VR</h2><p class="muted">Enter the room code shown on the TV.</p>
+      <input type="text" id="rc" maxlength="6" placeholder="ROOM CODE" style="text-transform:uppercase;text-align:center;font-size:28px;letter-spacing:.2em">
+      <div style="height:12px"></div><button class="btn" id="rcgo">Connect</button></div>`;
+    $('#rcgo').onclick = () => { const v = $('#rc').value.trim(); if (v) connectRoom(v); };
+    return;
+  }
+  if (!S) { app.innerHTML = `<div class="card center"><h2>🌴 Connecting…</h2><div class="muted">Looking for room <b>${esc(room)}</b>. <a href="#" id="chg" style="color:var(--fire2)">Change code</a></div></div>`; $('#chg').onclick = (e) => { e.preventDefault(); room = ''; store.set('room', ''); render(); }; return; }
+  const mine = playerOf(me().pid), T = S.tribal;
+  const key = [S.phase, S.episode, S.headsetId, mine ? mine.status + mine.tribe : 'out', S.taps?.[me().pid] || '', T?.voted?.includes(me().pid), T?.stage, S.immunityId, meIdx, joinError,
+    S.jury?.voted?.includes(me().pid), S.tappers?.includes(me().pid), S.finale?.pitchIndex, S.tribal?.readout?.index, S.merged, S.winnerId].join('|');
   if (key === lastKey) return;
   lastKey = key;
-
-  let html = `<header><div class="me">${mine ? `<span class="dot" style="background:${mine.color}"></span>${esc(mine.name)}` : '🌴 Survivor VR'}${S.immunityId === me().pid ? ' 🛡️' : ''}</div>
-    <span class="pill">${S.round ? 'Round ' + S.round : 'Lobby'}</span></header>`;
-
   if (!mine) {
-    html += `<div class="card"><h2>Join the tribe</h2><p class="muted">${esc(joinError || 'Pick a name and tap Join.')}</p>
+    app.innerHTML = `<div class="card"><h2>Join the tribe</h2><p class="muted">Room <b>${esc(room)}</b> · ${esc(joinError || 'Pick a name and tap Join.')}</p>
       <input type="text" id="nm" maxlength="14" placeholder="Your name" value="${esc(me().name)}" />
       <div style="height:12px"></div><button class="btn" id="join">Join</button></div>`;
-    $('#app').innerHTML = html;
     $('#join').onclick = () => join(($('#nm').value || '').trim() || 'Castaway');
     return;
   }
-
-  const meId = me().pid;
-  const isHeadset = S.headsetId === meId;
-  const ch = CHALLENGE_LIST.find((c) => c.id === S.challengeId);
-
-  switch (S.phase) {
-    case 'lobby':
-    case 'roundEnd':
-      html += `<div class="card center"><h2>${S.phase === 'roundEnd' ? 'Round over' : "You're in!"}</h2>
-        <p class="muted">${S.phase === 'roundEnd' ? roundEndText() : 'Waiting for the host to pick a challenge…'}</p>
-        <div>${S.players.map((p) => `<span class="pill" style="margin:3px"><span class="dot" style="background:${p.color}"></span>${esc(p.name)}</span>`).join('')}</div></div>`;
-      break;
-    case 'turnReady':
-    case 'countdown':
-      html += isHeadset
-        ? `<div class="card center"><h2>🥽 You're up!</h2><p>${esc(ch?.name)}: ${esc(ch?.blurb)}</p><p class="muted">Put on the headset. Stay seated or standing in one spot.</p></div>`
-        : `<div class="card center"><h2>${esc(nameOf(S.headsetId))} is up next</h2><p class="muted">${esc(ch?.name)}. When the run starts you get <b>one</b> tap: HELP or SABOTAGE.</p></div>`;
-      html += tapButtons(true, isHeadset);
-      break;
-    case 'running':
-      html += isHeadset
-        ? `<div class="card center"><h2>🥽 You're in the headset!</h2><p class="muted">Focus. The tribe is deciding your fate…</p></div>`
-        : `<div class="card center"><div class="muted">${esc(nameOf(S.headsetId))} is playing</div><div style="font-size:20px;margin-top:4px">One tap only. Choose wisely.</div></div>` + tapButtons(false, false);
-      break;
-    case 'turnResult': {
-      const r = S.results[S.headsetId];
-      html += `<div class="card center"><h2>${esc(nameOf(S.headsetId))}</h2><div style="font-size:36px;font-weight:900;color:var(--fire2)">${esc(r?.display ?? '')}</div></div>`;
-      break;
-    }
-    case 'roundResults':
-      html += `<div class="card"><h2>Results</h2>${S.ranking.map((id, i) => `<div class="opt ${i === 0 ? 'sel' : ''}"><b>${i + 1}</b> <span class="dot" style="background:${playerOf(id)?.color}"></span>${esc(nameOf(id))}<span style="margin-left:auto">${esc(S.results[id].display)}</span></div>`).join('')}
-        <p class="center">🛡️ <b>${esc(nameOf(S.immunityId))}</b> wins immunity${S.immunityId === meId ? ' - that is YOU!' : ''}.</p></div>`;
-      break;
-    case 'voting':
-      html += votingHtml(meId);
-      break;
-    case 'readout':
-      html += `<div class="card center"><h2>🔥 Eyes on the TV</h2><p class="muted">Votes are being read aloud…</p></div>`;
-      break;
-  }
-  $('#app').innerHTML = html;
+  const t = mine.tribe && tribeOf(mine.tribe);
+  const head = `<header><div class="me"><span class="dot" style="background:${mine.color}"></span>${esc(mine.name)}${S.immunityId === mine.id && S.phase !== 'lobby' && mine.status === 'active' ? ' 🛡️' : ''}
+    ${t ? `<span class="pill" style="background:${t.color};color:#111">${esc(t.name)}</span>` : ''}${mine.status === 'juror' ? '<span class="pill">juror</span>' : mine.status === 'out' ? '<span class="pill">out</span>' : ''}</div>
+    <span class="pill">${S.episode ? 'Ep ' + S.episode : 'Lobby'} · ${esc(room)}</span></header>`;
+  app.innerHTML = head + body(mine);
   wire();
 }
 
-function roundEndText() {
-  const out = S.votedOut || [];
-  return `${out.length ? `${esc(nameOf(out[0]))} got the most votes.` : 'It was a tie - nobody goes home.'} 🛡️ ${esc(nameOf(S.immunityId))} had immunity.`;
+const card = (h, p = '') => `<div class="card center"><h2>${h}</h2>${p ? `<p class="muted">${p}</p>` : ''}</div>`;
+
+function body(mine) {
+  const meId = mine.id, T = S.tribal, F = S.finale;
+  const isHeadset = S.headsetId === meId;
+  const ch = CHALLENGE_META[S.run?.challengeId || S.challengeId];
+  const watchWhy = mine.status !== 'active' ? (mine.status === 'juror' ? "You're on the jury - watch closely, you'll vote at the end." : "You're out of the game. Watch the TV.") :
+    S.episodeType === 'team' && S.run && mine.tribe !== S.run.group ? "Your tribe is watching. No taps for you this run." : 'Watch the TV.';
+  switch (S.phase) {
+    case 'lobby': return card("You're in!", 'Waiting for the host to start…') + `<div class="center">${S.players.map((p) => `<span class="pill" style="margin:3px"><span class="dot" style="background:${p.color}"></span>${esc(p.name)}</span>`).join('')}</div>`;
+    case 'tribes': { const tt = tribeOf(mine.tribe); return tt ? `<div class="card center" style="border-color:${tt.color}"><h2 style="color:${tt.color}">You are on ${esc(tt.name)}</h2><p>${S.players.filter((p) => p.tribe === tt.id).map((p) => esc(p.name)).join(', ')}</p></div>` : card('Welcome', 'One tribe. Every player for themselves.'); }
+    case 'picker': return card('Waiting…', 'The host is picking the next challenge.');
+    case 'turnReady': case 'countdown': case 'handoff': case 'running': {
+      if (isHeadset) return card(S.phase === 'running' ? "🥽 You're in the headset!" : "🥽 You're up!", S.phase === 'running' ? 'Focus. Your tribe is deciding your fate…' : `${esc(ch?.name)}: ${esc(ch?.blurb)}`);
+      const tapper = S.tappers.includes(meId);
+      if (!tapper) return card(`${esc(nameOf(S.headsetId))} is playing`, watchWhy);
+      const picked = S.taps?.[meId], open = S.phase === 'running' && !picked;
+      const rule = S.episodeType === 'team' ? 'Relay: you may even sabotage a teammate. Nobody will know it was you.' : 'Exactly one tap per run.';
+      return card(`${esc(nameOf(S.headsetId))} is ${S.phase === 'running' ? 'playing' : 'up'}`, esc(ch?.name || '')) + `<div class="big2">
+        <button class="tap help ${picked === 'help' ? 'picked' : ''}" data-tap="help" ${open ? '' : 'disabled'}>✨ HELP</button>
+        <button class="tap sabotage ${picked === 'sabotage' ? 'picked' : ''}" data-tap="sabotage" ${open ? '' : 'disabled'}>💥 SABOTAGE</button></div>
+        <div class="center muted">${picked ? 'Tap locked in. Anonymous.' : S.phase !== 'running' ? 'Taps open when the run starts.' : rule}</div>`;
+    }
+    case 'turnResult': return card(esc(nameOf(S.headsetId)), `<span style="font-size:34px;font-weight:900;color:var(--fire2)">${esc(S.lastResult?.display ?? '')}</span>`);
+    case 'roundResults':
+      if (S.team) return card(`${esc(tribeOf(S.team.winning).name)} win!`, `${esc(tribeOf(S.team.losing).name)} goes to Tribal Council.${mine.tribe === S.team.losing ? ' <b>That is YOUR tribe.</b>' : mine.tribe ? ' Your tribe is safe.' : ''}`);
+      return `<div class="card"><h2>Results</h2>${S.ranking.map((id, i) => `<div class="opt ${i === 0 ? 'sel' : ''}"><b>${i + 1}</b> <span class="dot" style="background:${playerOf(id)?.color}"></span>${esc(nameOf(id))}<span style="margin-left:auto">${esc(S.results[id]?.display)}</span></div>`).join('')}
+        <p class="center">🛡️ <b>${esc(nameOf(S.immunityId))}</b> wins immunity${S.immunityId === meId ? ' - that is YOU!' : ''}.</p></div>`;
+    case 'voting': return votingHtml(mine);
+    case 'readout': return card('🔥 Eyes on the TV', 'Votes are being read aloud…');
+    case 'tie': return card("It's a tie!", T.tied.includes(meId) ? 'You are tied. Watch the TV.' : 'Watch the TV.');
+    case 'unanimous': {
+      if (!T.voters2.includes(meId)) return card('Unanimous decision', T.tied.includes(meId) ? 'You are tied - you do not vote. Plead your case out loud!' : 'Watch the TV.');
+      return `<div class="card"><h2>Unanimous decision</h2><p class="muted">Talk it out! Everyone left must pick the SAME player.</p>
+        ${T.tied.map((id) => `<div class="opt ${myPick === id ? 'sel' : ''}" data-pick="${id}"><span class="dot" style="background:${playerOf(id)?.color}"></span>${esc(nameOf(id))}</div>`).join('')}</div>`;
+    }
+    case 'draw': return card('🎲 Random draw', 'Players who got no votes: equal chance. Watch the TV…');
+    case 'tribalResult': return card(`${esc(nameOf(T.result.eliminated))} is voted out`, T.result.eliminated === meId ? 'Your torch is snuffed. Thanks for playing!' + (T.result.wasJuror ? ' You are now a juror.' : '') : 'The tribe has spoken.');
+    case 'merge': return card('🤝 The tribes merge!', 'From now on, every player for themselves.');
+    case 'finaleIntro': return card('🏝️ The finale', F.ids.includes(meId) ? 'You are a finalist-hopeful: you play all four challenges.' : 'Jurors: watch everything. You will vote for the winner.');
+    case 'finaleScores': { const row = F.rows[F.rows.length - 1]; return `<div class="card"><h2>${esc(CHALLENGE_META[row.challengeId].name)}</h2>${row.entries.map((e) => `<div class="opt"><b>${e.rank}</b> ${esc(nameOf(e.id))}<span style="margin-left:auto">+${+e.points.toFixed(1)}</span></div>`).join('')}</div>`; }
+    case 'finaleImmunity': return card(`🛡️ ${esc(nameOf(F.immunityId))} wins immunity`, F.immunityId === meId ? "You're safe - you can't lose the fire challenge." : F.ids.includes(meId) ? 'You face off in fire-making!' : 'The other two make fire.');
+    case 'fireResult': return card(`🔥 ${esc(nameOf(F.fire.winner))} wins fire`, F.finalists.includes(meId) ? 'You are a FINALIST!' : `${esc(nameOf(F.fire.loser))} joins the jury.`);
+    case 'pitch': return card(`🎤 ${esc(nameOf(F.pitchOrder[F.pitchIndex]))} is pitching`, 'Listen carefully, jurors.');
+    case 'jury': {
+      if (!S.jury.jurors.includes(meId)) return card('Jury is voting', 'Wait for the reveal on the TV.');
+      if (S.jury.voted.includes(meId)) return card('✅ Vote locked in', 'Waiting for the other jurors…');
+      return `<div class="card"><h2>🏆 Jury vote</h2><p class="muted">Who should be the Sole Survivor?</p>${F.finalists.map((id) => `<div class="opt" data-jury="${id}" style="font-size:22px"><span class="dot" style="background:${playerOf(id)?.color}"></span>${esc(nameOf(id))}</div>`).join('')}</div>`;
+    }
+    case 'juryReveal': return card('🏆 Jury reveal', 'Eyes on the TV…');
+    case 'winner': return card(S.winnerId === meId ? '👑 YOU WON!' : `👑 ${esc(nameOf(S.winnerId))} wins!`, 'Thanks for playing.');
+  }
+  return card('…');
 }
 
-function tapButtons(early, isHeadset) {
-  const mineTap = S.taps?.[me().pid];
-  const open = S.phase === 'running' && !isHeadset && !mineTap;
-  return `<div class="big2">
-    <button class="tap help ${mineTap === 'help' ? 'picked' : ''}" data-tap="help" ${open ? '' : 'disabled'}>✨ HELP</button>
-    <button class="tap sabotage ${mineTap === 'sabotage' ? 'picked' : ''}" data-tap="sabotage" ${open ? '' : 'disabled'}>💥 SABOTAGE</button>
-  </div>
-  <div class="center muted">${isHeadset ? 'You cannot tap on your own run.' : mineTap ? 'Tap locked in. Nobody knows it was you.' : early ? 'Taps open when the run starts.' : 'Exactly one tap per run.'}</div>`;
-}
-
-function votingHtml(meId) {
-  if (S.voted.includes(meId)) return `<div class="card center"><h2>✅ Vote locked in</h2><p class="muted">Waiting for the others…</p></div>`;
-  const imm = S.immunityId;
-  const cands = S.players.filter((p) => !p.eliminated);
-  return `<div class="card"><h2>🔥 Tribal Council</h2>
-    <p class="muted">Pick who goes home. Immunity holder is safe. Your message is read out anonymously.</p>
-    ${cands.map((p) => {
-      const blocked = p.id === imm || (!GAME.vote.allowSelfVote && p.id === meId);
-      return `<div class="opt ${blocked ? 'imm' : ''} ${voteDraft.target === p.id ? 'sel' : ''}" data-v="${blocked ? '' : p.id}">
-        <span class="dot" style="background:${p.color}"></span>${esc(p.name)}${p.id === imm ? ' 🛡️ immune' : p.id === meId ? ' (you)' : ''}</div>`;
-    }).join('')}
+function votingHtml(mine) {
+  const T = S.tribal, meId = mine.id;
+  if (!T.voters.includes(meId)) return card('Tribal Council', S.episodeType === 'team' ? 'Your tribe is safe tonight. Watch the TV.' : mine.status === 'juror' ? "You're on the jury. Watch the TV." : 'Watch the TV.');
+  if (T.voted.includes(meId)) return card('✅ Vote locked in', 'Waiting for the others…');
+  const key = S.episode + ':' + T.stage;
+  if (voteDraft.key !== key) voteDraft = { key, target: null, message: '' };
+  const cands = T.targets.filter((id) => GAME.vote.allowSelfVote || id !== meId);
+  const title = T.stage === 'revote' ? `🔥 TIE - REVOTE` : '🔥 Tribal Council';
+  const sub = T.stage === 'revote' ? 'Everyone votes again, but only for the tied players. Say why in 1-2 sentences.' : `Pick who goes home${S.episodeType === 'individual' ? '. The immunity holder is safe' : ''}. Your message is read out anonymously.`;
+  return `<div class="card"><h2>${title}</h2><p class="muted">${sub}</p>
+    ${cands.map((id) => `<div class="opt ${voteDraft.target === id ? 'sel' : ''}" data-v="${id}"><span class="dot" style="background:${playerOf(id)?.color}"></span>${esc(nameOf(id))}</div>`).join('')}
+    ${S.episodeType === 'individual' && S.immunityId ? `<div class="opt imm">🛡️ ${esc(nameOf(S.immunityId))} (immune)</div>` : ''}
     <textarea id="msg" maxlength="${GAME.vote.maxChars}" placeholder="Why? (1-${GAME.vote.maxSentences} sentences)">${esc(voteDraft.message)}</textarea>
-    <div class="count" id="cnt"></div>
-    <button class="btn" id="cast">Cast vote</button></div>`;
+    <div class="count" id="cnt"></div><button class="btn" id="cast">Cast vote</button></div>`;
 }
 
 function wire() {
-  document.querySelectorAll('[data-tap]').forEach((b) => (b.onclick = () => tap(b.dataset.tap)));
+  document.querySelectorAll('[data-tap]').forEach((b) => (b.onclick = () => send({ t: 'tap', pid: me().pid, kind: b.dataset.tap })));
   document.querySelectorAll('[data-v]').forEach((b) => (b.onclick = () => {
-    if (!b.dataset.v) return;
     voteDraft.target = b.dataset.v;
     document.querySelectorAll('[data-v]').forEach((x) => x.classList.toggle('sel', x === b));
     validate();
   }));
+  document.querySelectorAll('[data-pick]').forEach((b) => (b.onclick = () => {
+    myPick = b.dataset.pick; send({ t: 'pick', pid: me().pid, target: myPick });
+    document.querySelectorAll('[data-pick]').forEach((x) => x.classList.toggle('sel', x === b));
+  }));
+  document.querySelectorAll('[data-jury]').forEach((b) => (b.onclick = () => send({ t: 'jury', pid: me().pid, target: b.dataset.jury })));
   const ta = $('#msg');
   if (ta) ta.oninput = () => { voteDraft.message = ta.value; validate(); };
   const cast = $('#cast');
-  if (cast) { cast.onclick = vote; validate(); }
+  if (cast) { cast.onclick = () => send({ t: 'vote', pid: me().pid, target: voteDraft.target, message: voteDraft.message }); validate(); }
 }
 
 function validate() {
   const cast = $('#cast'); if (!cast) return;
-  const msg = voteDraft.message.trim();
-  const n = countSentences(msg);
-  const ok = voteDraft.target && msg.length >= GAME.vote.minChars && n <= GAME.vote.maxSentences;
-  cast.disabled = !ok;
+  const msg = voteDraft.message.trim(), n = countSentences(msg);
+  cast.disabled = !(voteDraft.target && msg.length >= GAME.vote.minChars && n <= GAME.vote.maxSentences);
   $('#cnt').textContent = `${msg.length}/${GAME.vote.maxChars} · ${n}/${GAME.vote.maxSentences} sentences${n > GAME.vote.maxSentences ? ' - too many!' : ''}`;
 }
-
-// reset vote draft each new tribal
-let lastRoundForDraft = -1;
-setInterval(() => { if (S && S.phase === 'voting' && lastRoundForDraft !== S.round) { lastRoundForDraft = S.round; voteDraft = { target: null, message: '' }; lastKey = ''; render(); } }, 400);
 
 // ---------- debug drawer ----------
 $('#dbgbtn').onclick = () => { const d = $('#dbg'); d.style.display = d.style.display === 'block' ? 'none' : 'block'; renderDbg(); };
@@ -183,32 +187,39 @@ if (location.search.includes('debug')) $('#dbg').style.display = 'block';
 function renderDbg() {
   const d = $('#dbg');
   if (d.style.display !== 'block') return;
+  if (d.contains(document.activeElement) && document.activeElement.tagName === 'SELECT') return;
   const joined = (pid) => !!playerOf(pid);
   d.innerHTML = `<div class="muted" style="margin-bottom:8px">Debug: act as several fake players from this one tab.</div>
     <div class="row"><label>Acting as</label>
       <select id="who">${ids.map((x, i) => `<option value="${i}" ${i === meIdx ? 'selected' : ''}>${esc(x.name || '(me, not joined)')}${x.fake ? ' [fake]' : ''}${joined(x.pid) ? '' : ' - not joined'}</option>`).join('')}</select></div>
     <div class="row" style="margin-top:8px">
-      <button class="btn" id="addfake">+ Add fake player</button>
-      <button class="btn" id="joinall">Join all</button>
-      <button class="btn" id="randvote">Auto-vote (all)</button>
-      <button class="btn" id="randtap">Random tap (all)</button></div>`;
-  $('#who').onchange = (e) => { meIdx = +e.target.value; store.set('me', meIdx); lastKey = ''; voteDraft = { target: null, message: '' }; render(); renderDbg(); };
-  $('#addfake').onclick = () => {
+      <button class="btn" id="addfake">+ Add fake player</button><button class="btn" id="add5">+5</button>
+      <button class="btn" id="joinall">Join all</button><button class="btn" id="randtap">Random tap (all)</button>
+      <button class="btn" id="randvote">Auto-vote / pick / jury (all)</button></div>`;
+  $('#who').onchange = (e) => { meIdx = +e.target.value; store.set('me', meIdx); lastKey = ''; myPick = null; voteDraft = { key: '', target: null, message: '' }; render(); renderDbg(); };
+  const addFake = () => {
     const used = new Set(ids.map((x) => x.name));
     const name = fakeNames.find((n) => !used.has(n)) || 'Fake' + ids.length;
     const x = { pid: 'f_' + uid(), name, fake: true };
-    ids.push(x); store.set('ids', ids);
-    net.send({ t: 'join', pid: x.pid, name });
-    meIdx = ids.length - 1; store.set('me', meIdx); lastKey = ''; render(); renderDbg();
+    ids.push(x); store.set('ids', ids); send({ t: 'join', pid: x.pid, name }); return x;
   };
-  $('#joinall').onclick = () => { for (const x of ids) if (x.name && !joined(x.pid)) net.send({ t: 'join', pid: x.pid, name: x.name }); };
-  $('#randtap').onclick = () => { for (const x of ids) net.send({ t: 'tap', pid: x.pid, kind: Math.random() < 0.5 ? 'help' : 'sabotage' }); };
+  $('#addfake').onclick = () => { addFake(); meIdx = ids.length - 1; store.set('me', meIdx); lastKey = ''; render(); renderDbg(); };
+  $('#add5').onclick = () => { for (let i = 0; i < 5; i++) addFake(); renderDbg(); };
+  $('#joinall').onclick = () => { for (const x of ids) if (x.name && !joined(x.pid)) send({ t: 'join', pid: x.pid, name: x.name }); };
+  $('#randtap').onclick = () => { for (const x of ids) send({ t: 'tap', pid: x.pid, kind: Math.random() < 0.5 ? 'help' : 'sabotage' }); };
   $('#randvote').onclick = () => {
-    const lines = ['Too sneaky for my taste.', 'You are the biggest threat. Sorry!', 'Nothing personal, pure strategy.', 'I did not like that last move. Bye.'];
+    const lines = ['Too sneaky for my taste.', 'You are the biggest threat. Sorry!', 'Nothing personal, pure strategy.', 'I did not like that last move.'];
     for (const x of ids) {
-      const opts = S.players.filter((p) => p.id !== x.pid && p.id !== S.immunityId);
-      if (!opts.length) continue;
-      net.send({ t: 'vote', pid: x.pid, target: opts[Math.floor(Math.random() * opts.length)].id, message: lines[Math.floor(Math.random() * lines.length)] });
+      if (S.phase === 'jury') send({ t: 'jury', pid: x.pid, target: S.finale.finalists[Math.floor(Math.random() * 2)] });
+      else if (S.phase === 'unanimous') send({ t: 'pick', pid: x.pid, target: S.tribal.tied[0] });
+      else if (S.phase === 'voting') {
+        const opts = S.tribal.targets.filter((id) => id !== x.pid); if (!opts.length) continue;
+        send({ t: 'vote', pid: x.pid, target: opts[Math.floor(Math.random() * opts.length)], message: lines[Math.floor(Math.random() * lines.length)] });
+      }
     }
   };
 }
+
+const urlRoom = new URLSearchParams(location.search).get('room');
+const saved = urlRoom || store.get('room', '');
+if (saved) connectRoom(saved); else render();
