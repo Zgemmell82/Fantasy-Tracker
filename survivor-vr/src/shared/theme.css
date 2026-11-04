@@ -1,0 +1,12 @@
+:root {
+  --bg: #12261c; --bg2: #1b3a2a; --card: #24473a; --ink: #fdf3dc; --muted: #b8c9a8;
+  --sand: #e9c987; --fire: #ff8a2b; --fire2: #ffcc4d; --help: #3fd18a; --sab: #ef5b3c; --sea: #3aa3d9;
+  --radius: 14px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: radial-gradient(120% 90% at 50% 0%, #1f4a35 0%, var(--bg) 60%); color: var(--ink);
+  font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif; }
+button { font: inherit; color: inherit; cursor: pointer; }
+h1, h2, h3 { margin: 0; letter-spacing: .02em; }
+.torch { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--fire2); box-shadow: 0 0 10px var(--fire); }
+.dot { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:6px; vertical-align:middle; }

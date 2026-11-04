@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Survivor VR - TV</title>
+<link rel="stylesheet" href="/src/shared/theme.css" />
+<style>
+  body { overflow: hidden; }
+  .screen { position: fixed; inset: 0; padding: 2.2vh 2.5vw; display: none; }
+  .screen.on { display: grid; }
+  #screen-game { grid-template-columns: 1fr 27vw; gap: 2vw; }
+  .viewwrap { position: relative; background: #000; border-radius: 18px; overflow: hidden; border: 4px solid #5a3a1e; align-self: center; aspect-ratio: 16/9; width: 100%; }
+  #mirror { width: 100%; height: 100%; object-fit: cover; display:block; background:#123; }
+  #hudtop { position:absolute; left:0; right:0; top:0; display:flex; justify-content:space-between; align-items:flex-start; padding: 1.4vh 1.4vw;
+    background: linear-gradient(#000a, #0000); }
+  #who { font-size: 2.6vh; font-weight: 700; } #who small { display:block; font-weight: 400; color: var(--sand); font-size: 2vh; }
+  #timer { font-size: 9vh; font-weight: 900; color: var(--fire2); line-height: 1; text-shadow: 0 4px 16px #000; font-variant-numeric: tabular-nums; }
+  #timer small { display:block; font-size: 2vh; color: var(--sand); text-align:right; }
+  #progress { position:absolute; left:1.4vw; bottom:1.4vh; font-size: 3.4vh; font-weight:800; text-shadow: 0 3px 10px #000; }
+  #cdbig { position:absolute; inset:0; display:none; align-items:center; justify-content:center; font-size: 30vh; font-weight:900; color: var(--fire2); text-shadow: 0 8px 40px #000; }
+  #card { position:absolute; inset:0; display:none; align-items:center; justify-content:center; flex-direction: column; background: #000b; text-align:center; }
+  #card .big { font-size: 8vh; font-weight: 900; color: var(--fire2); }
+  aside { display:flex; flex-direction: column; gap: 1.6vh; min-height:0; }
+  aside h3 { color: var(--sand); text-transform: uppercase; letter-spacing:.1em; font-size: 2vh; }
+  #feed { list-style:none; margin:0; padding:0; display:flex; flex-direction: column-reverse; gap: .9vh; flex: 1; overflow:hidden; justify-content:flex-end; }
+  #feed li { padding: 1.2vh 1.2vw; border-radius: 12px; font-size: 2.5vh; background: var(--card); border-left: 1vh solid var(--sea); animation: pop .35s ease-out; }
+  #feed li.help { border-color: var(--help); } #feed li.sabotage { border-color: var(--sab); }
+  #feed li small { display:block; font-size: 1.6vh; opacity:.7; text-transform: uppercase; letter-spacing:.1em; }
+  @keyframes pop { from { transform: scale(.8) translateX(3vw); opacity: 0; } to { transform:none; opacity:1; } }
+  #tribe .p { display:inline-flex; align-items:center; gap:.5vw; margin: .3vh .8vw .3vh 0; font-size: 2.2vh; }
+  .p .dot { width:1.6vh; height:1.6vh; }
+  .p.on { font-weight:800; color: var(--fire2); }
+  #screen-other { place-items: center; text-align:center; }
+  .big { font-size: 9vh; font-weight: 900; color: var(--fire2); text-shadow: 0 4px 24px #000a; }
+  .mid { font-size: 4vh; } .sm { font-size: 2.6vh; color: var(--muted); }
+  .board { display:flex; flex-direction:column; gap: 1.2vh; min-width: 50vw; margin-top: 3vh; text-align:left; }
+  .board .r { display:flex; align-items:center; gap: 1.4vw; background: var(--card); padding: 1.4vh 1.8vw; border-radius: 14px; font-size: 3.6vh; }
+  .board .r.win { background: linear-gradient(90deg,#8a5a10,#c8892a); border: .4vh solid var(--fire2); }
+  .board .r .v { margin-left:auto; font-variant-numeric: tabular-nums; font-weight:800; }
+  .parch { background: #e9d4a1; color: #3b2612; border-radius: 22px; padding: 6vh 6vw; max-width: 75vw; border: .8vh solid #8a5a33; box-shadow: 0 20px 60px #000a; }
+  .parch .to { font-size: 7vh; font-weight: 900; } .parch .msg { font-size: 4.2vh; margin-top: 3vh; font-style: italic; line-height: 1.3; }
+  .parch .who { font-size: 2.6vh; text-transform:uppercase; letter-spacing:.2em; opacity:.7; margin-bottom: 2vh; }
+  .fire { font-size: 12vh; animation: flick 1s infinite alternate; } @keyframes flick { to { transform: scale(1.1) rotate(2deg); filter: brightness(1.3);} }
+  .urls { margin-top: 3vh; font-size: 3.2vh; background: #0007; padding: 2vh 3vw; border-radius: 16px; }
+  .urls b { color: var(--fire2); }
+  .tally .r { font-size: 3.6vh; }
+  .snuff { opacity:.45; text-decoration: line-through; }
+</style>
+</head>
+<body>
+<div id="screen-game" class="screen">
+  <div class="viewwrap">
+    <img id="mirror" alt="" />
+    <div id="hudtop"><div id="who"></div><div id="timer"></div></div>
+    <div id="progress"></div>
+    <div id="cdbig"></div>
+    <div id="card"></div>
+  </div>
+  <aside>
+    <h3>The jungle reacts</h3>
+    <ul id="feed"></ul>
+    <div id="tapinfo" class="sm"></div>
+    <div id="tribe"></div>
+  </aside>
+</div>
+<div id="screen-other" class="screen"></div>
+<script type="module" src="/src/tv/main.js"></script>
+</body>
+</html>
