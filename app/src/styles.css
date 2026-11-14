@@ -847,3 +847,6 @@ button.lrow:active { background: var(--surface-3); }
 .hr-expand { margin-top: 2px; }
 
 .hr-name, .lc-name, .gp-name, .hit-name { overflow-wrap: anywhere; }
+
+.hb-reconnect { margin-top: 6px; }
+.banner .hb-reconnect { flex: none; }

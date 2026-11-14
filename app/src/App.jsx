@@ -17,6 +17,7 @@ import { matchSleeperLeague, sleeperLeagues, syncSleeper } from './lib/sleeper.j
 import { syncEspn } from './lib/espn.js';
 import { syncMfl } from './lib/mfl.js';
 import { syncYahoo, yahooLeagues, startYahooSignIn, yahooStatus, yahooDisconnect, yahooFinish } from './lib/yahoo.js';
+import { clearUnmatched, unmatchedPlayers } from './lib/playerids.js';
 import { takeYahooCode } from './lib/yahoo-return.js';
 import { PlaysScreen, RulesContext, useScoreboard } from './Plays.jsx';
 import { leagueRules } from './lib/scoring.js';
@@ -189,8 +190,9 @@ function Tracker({ user, onSignOut }) {
     const back = takeYahooCode();
     if (!back) return;
     setConnFor(back.league || null);
-    if (!back.code) { setYahooNote(back.error); return; }
-    yahooFinish(back.code).then(() => setYahooNote('Connected to Yahoo. Pick your team below.'), e => setYahooNote(e.message));
+    const done = msg => { setYahooNote(msg); if (!back.league) flash(msg); };       // signed in from the Locker Room, no league sheet to show it in
+    if (!back.code) { done(back.error); return; }
+    yahooFinish(back.code).then(() => { done('Connected to Yahoo. Pick your team under a league\'s Source.'); syncAll(true); }, e => done(e.message));
   }, []);
   const [matchupFor, setMatchupFor] = useState(null);
   const [theme, setThemeState] = useState(getTheme);
@@ -274,7 +276,7 @@ function Tracker({ user, onSignOut }) {
   }, []);
 
   // Pulls one league's starters for a week from its connection.
-  const pullLeague = useCallback(async (league, week) => {
+  const pullLeague = useCallback(async (league, week, manual) => {
     const { conn, sleeperUser } = dbRef.current;
     const c = conn[league];
     if (c.source === 'sleeper') {
@@ -293,22 +295,22 @@ function Tracker({ user, onSignOut }) {
     }
     if (c.source === 'yahoo') {
       if (!c.leagueId || !c.teamId) return Promise.reject(new Error('Pick your Yahoo team under Source.'));
-      return syncYahoo(c.leagueId, c.teamId, week);
+      return syncYahoo(c.leagueId, c.teamId, week, undefined, { fresh: !!manual });      // Sync button: ask Yahoo again rather than use the cached answer
     }
     return syncEspnFor(c, week, dbRef.current.espnHelper);
   }, [setConn]);
 
-  const syncOne = useCallback(async (league, week) => {
+  const syncOne = useCallback(async (league, week, manual) => {
     const c = dbRef.current.conn[league];
     if (!c) return false;
     const source = c.source;
     try {
-      const res = await pullLeague(league, week);
+      const res = await pullLeague(league, week, manual);
       setLeague(week, league, res, source);
       markSynced(league + ':' + week, { ok: true });
       return true;
     } catch (e) {
-      markSynced(league + ':' + week, { ok: false, err: e.message });
+      markSynced(league + ':' + week, { ok: false, err: e.message, ...(e.code ? { code: e.code } : {}) });
       return false;
     }
   }, [pullLeague, setLeague, markSynced]);
@@ -331,7 +333,7 @@ function Tracker({ user, onSignOut }) {
     syncingRef.current = true;
     setSyncing(true);
     let ok = 0;
-    for (const n of targets) if (await syncOne(n, week)) ok++;
+    for (const n of targets) if (await syncOne(n, week, !auto)) ok++;
     syncingRef.current = false;
     setSyncing(false);
     if (!auto || ok < targets.length) flash('Synced ' + ok + ' of ' + targets.length + ' connected leagues');
@@ -418,13 +420,13 @@ function Tracker({ user, onSignOut }) {
 
       <main className="body" key={screen}>
         {screen === 'games'
-          ? <Games week={week} wk={wk} names={shown} leagues={names} sel={sel} onSel={setLgSel} board={board} onMatchup={setMatchupFor} synced={db.synced} alerts={alerts.filter(a => a.leagues.some(l => shown.includes(l)))} acks={acks} setAck={setAck} injReady={!!inj.lookup} injError={inj.error} />
+          ? <Games week={week} wk={wk} names={shown} leagues={names} sel={sel} onSel={setLgSel} board={board} onReconnect={setConnFor} synced={db.synced} alerts={alerts.filter(a => a.leagues.some(l => shown.includes(l)))} acks={acks} setAck={setAck} injReady={!!inj.lookup} injError={inj.error} />
           : screen === 'hot'
           ? <HotRoute week={week} wk={wk} leagues={names} shown={shown} sel={sel} onSel={setLgSel} board={board} helper={db.espnHelper} data={db.data} />
           : screen === 'plays'
           ? <PlaysScreen week={week} games={groupByGame(week, wk, undefined, shown).games} board={board} boardError={boardError} helper={db.espnHelper} scored={scoredWeek} leagues={names} sel={sel} onSel={setLgSel} />
           : <Leagues week={week} wk={wk} leagues={db.leagues} remain={remain} alertCounts={alertCounts} onMatchup={setMatchupFor} theme={theme} onTheme={t => setThemeState(setTheme(t))} conn={db.conn} account={{ email: user.email, cloud, onSignOut: signOut, canImport: !!legacy && !db.leagues.length, onImport: importLegacy, onRetry: settle }} synced={db.synced} syncing={syncing}
-              onSync={async n => { if (await syncOne(n, week)) flash(n + ' synced'); }}
+              onSync={async n => { if (await syncOne(n, week, true)) flash(n + ' synced'); }}
               onEdit={setEditFor} onConnect={setConnFor} onSettings={setLeagueFor} />}
       </main>
 
@@ -558,14 +560,14 @@ function LineupCheck({ alerts, acks, setAck, ready, error }) {
 }
 
 
-function Games({ week, wk, names, leagues, sel, onSel, board, alerts, acks, setAck, injReady, injError, onMatchup, synced }) {
+function Games({ week, wk, names, leagues, sel, onSel, board, alerts, acks, setAck, injReady, injError, synced, onReconnect }) {
   return (
     <div className="stack">
       <LineupCheck alerts={alerts} acks={acks} setAck={setAck} ready={injReady} error={injError} />
 
       <LeagueFilter leagues={leagues} sel={sel} onChange={onSel} />
 
-      <LeagueBoard week={week} wk={wk} names={names} board={board} onMatchup={onMatchup} synced={synced} />
+      <LeagueBoard week={week} wk={wk} names={names} board={board} synced={synced} onReconnect={onReconnect} />
 
       {!names.length && (
         <div className="card empty">
@@ -581,6 +583,7 @@ function Games({ week, wk, names, leagues, sel, onSel, board, alerts, acks, setA
 function Leagues({ week, wk, leagues, remain, alertCounts, onMatchup, theme, onTheme, conn, synced, syncing, account, onSync, onEdit, onConnect, onSettings }) {
   return (
     <div className="stack">
+      <YahooAccount enabled={leagues.some(x => (conn[x.name] || {}).source === 'yahoo')} />
       {!leagues.length && (
         <div className="card empty">
           <Icon.trophy size={28} />
@@ -628,6 +631,7 @@ function Leagues({ week, wk, leagues, remain, alertCounts, onMatchup, theme, onT
             <div className="league-actions">
               {linked && <button className="pill-btn primary" disabled={syncing} onClick={() => onSync(n)}><Icon.refresh size={15} sw={2.5} />Sync</button>}
               <button className={'pill-btn' + (linked ? '' : ' primary')} onClick={() => onEdit(n)}><Icon.pencil size={15} sw={2.5} />Edit</button>
+              {failed && sy.code === 'needs_reauth' && <button className="pill-btn primary" onClick={() => onConnect(n)}><Icon.link size={15} sw={2.5} />Reconnect Yahoo</button>}
               <button className="pill-btn" onClick={() => onConnect(n)}><Icon.link size={15} sw={2.5} />{linked ? 'Source' : 'Connect'}</button>
               <button className="pill-btn square" onClick={() => onSettings({ name: n })} aria-label={'Name and color for ' + n}><Icon.settings size={16} sw={2.5} /></button>
             </div>
@@ -714,6 +718,52 @@ function EditSheet({ league, week, lineup, onEdit, onClose }) {
   );
 }
 
+// The Yahoo login is one per account, shared by every Yahoo league: show it, and let it be set up or redone from here.
+function YahooAccount({ enabled }) {
+  const [st, setSt] = useState({ state: 'idle', msg: '' });
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let stop = false;
+    yahooStatus().then(r => { if (!stop) setSt({ state: r.needsReauth ? 'reauth' : r.connected ? 'in' : 'out', msg: r.configured ? '' : 'Yahoo isn\'t set up on your Supabase project yet (see app/README.md).' }); },
+      e => { if (!stop) setSt({ state: e.code === 'helper' ? 'unavailable' : 'out', msg: e.code === 'helper' ? e.message : '' }); });
+    return () => { stop = true; };
+  }, []);
+  if (st.state === 'idle' || (st.state === 'unavailable' && !enabled)) return null;
+  if (st.state === 'out' && !enabled) return null;                       // nobody uses Yahoo: stay out of the way until they pick it as a source
+  const go = async () => { setBusy(true); try { await startYahooSignIn(null); } catch (e) { setSt(s => ({ ...s, msg: e.message })); setBusy(false); } };
+  const off = async () => { setBusy(true); try { await yahooDisconnect(); setSt({ state: 'out', msg: '' }); } catch (e) { setSt(s => ({ ...s, msg: e.message })); } setBusy(false); };
+  return (
+    <section className="card account">
+      <div className="account-row">
+        <span className="lavatar" style={{ '--lc': '#a78bfa' }}>Y!</span>
+        <div className="league-id">
+          <div className="league-name">Yahoo Fantasy</div>
+          <div className={'league-src' + (st.state === 'reauth' ? ' acct-offline' : '')}>
+            {st.state === 'in' ? 'Connected · read-only' : st.state === 'reauth' ? 'Needs you to sign in again' : st.state === 'unavailable' ? 'Helper not reachable' : 'Not connected'}
+          </div>
+        </div>
+      </div>
+      {st.msg && <p className="sheet-note">{st.msg}</p>}
+      <div className="league-actions">
+        {(st.state === 'out' || st.state === 'reauth') && <button className="pill-btn primary" onClick={go} disabled={busy}><Icon.link size={15} sw={2.5} />{st.state === 'reauth' ? 'Reconnect Yahoo' : 'Connect Yahoo'}</button>}
+        {st.state === 'in' && <button className="pill-btn" onClick={off} disabled={busy}>Disconnect</button>}
+      </div>
+    </section>
+  );
+}
+
+// Yahoo players that couldn't be matched to Sleeper/ESPN ids still show by name; this says how many, so it's not a mystery.
+function YahooUnmatched() {
+  const [list, setList] = useState(unmatchedPlayers);
+  if (!list.length) return null;
+  return (
+    <p className="sheet-note">
+      {list.length} Yahoo {list.length === 1 ? 'player' : 'players'} couldn't be matched to a Sleeper or ESPN id ({list.slice(0, 3).map(p => p.name).join(', ')}{list.length > 3 ? '…' : ''}). They still show up by name; projections may be missing.{' '}
+      <button className="text-btn" onClick={() => { clearUnmatched(); setList([]); }}>Clear</button>
+    </p>
+  );
+}
+
 function ConnectSheet({ league, week, conn, sleeperUser, setSleeperUser, setConn, syncErr, takenIds, espnHelper, setEspnHelper, testEspn, testMfl, yahooNote, onClose }) {
   const [sleeperList, setSleeperList] = useState(null);
   const [sleeperMsg, setSleeperMsg] = useState('');
@@ -761,10 +811,15 @@ function ConnectSheet({ league, week, conn, sleeperUser, setSleeperUser, setConn
     setYh({ state: 'busy', teams: [], msg: '' });
     try {
       const st = await yahooStatus();
+      if (st.needsReauth) { setYh({ state: 'reauth', teams: [], msg: '' }); return; }
       if (!st.connected) { setYh({ state: 'out', teams: [], msg: st.configured ? '' : 'Yahoo isn\'t set up on your Supabase project yet (see app/README.md).' }); return; }
       const teams = await yahooLeagues();
       setYh({ state: 'in', teams, msg: teams.length ? '' : 'No Yahoo fantasy football teams found for this season.' });
-    } catch (e) { setYh({ state: e.message === 'not_connected' ? 'out' : 'err', teams: [], msg: e.message === 'not_connected' ? '' : e.message }); }
+    } catch (e) {
+      if (e.code === 'needs_reauth') setYh({ state: 'reauth', teams: [], msg: '' });
+      else if (e.code === 'not_connected') setYh({ state: 'out', teams: [], msg: '' });
+      else setYh({ state: 'err', teams: [], msg: e.message });
+    }
   };
   useEffect(() => { if (c.source === 'yahoo') yahooLoad(); }, [c.source, yahooNote]); // eslint-disable-line react-hooks/exhaustive-deps
   const yahooGo = async () => { setBusy(true); try { await startYahooSignIn(league); } catch (e) { setYh(y => ({ ...y, msg: e.message })); setBusy(false); } };
@@ -801,8 +856,9 @@ function ConnectSheet({ league, week, conn, sleeperUser, setSleeperUser, setConn
         <>
           {yahooNote && <div className={'banner' + (/^Connected/.test(yahooNote) ? '' : ' err')}><span>{yahooNote}</span></div>}
           {yh.state === 'busy' && <div className="sheet-note">Checking Yahoo…</div>}
-          {yh.state === 'out' && (
-            <button className="pill-btn" onClick={yahooGo} disabled={busy}><Icon.link size={15} sw={2.5} />{busy ? 'Opening Yahoo…' : 'Connect Yahoo'}</button>
+          {yh.state === 'reauth' && <div className="banner err"><Icon.alert size={16} sw={2.5} /><span>Yahoo stopped accepting the saved sign-in. Reconnect to keep your Yahoo lineups updating; your leagues and team choice are kept.</span></div>}
+          {(yh.state === 'out' || yh.state === 'reauth') && (
+            <button className="pill-btn primary" onClick={yahooGo} disabled={busy}><Icon.link size={15} sw={2.5} />{busy ? 'Opening Yahoo…' : yh.state === 'reauth' ? 'Reconnect Yahoo' : 'Connect Yahoo'}</button>
           )}
           {yh.msg && <div className="sheet-note">{yh.msg}</div>}
           {yh.state === 'in' && yh.teams.length > 0 && (
@@ -813,7 +869,7 @@ function ConnectSheet({ league, week, conn, sleeperUser, setSleeperUser, setConn
                 return (
                   <button key={t.teamKey} className={'lrow pick' + (on ? ' on' : '')}
                     onClick={() => { setConn({ leagueId: t.leagueKey, teamId: t.teamKey, name: t.teamName }); setEspnMsg('Saved. Tap Done to pull this week\'s lineups.'); }}>
-                    <span className="lrow-main"><span className="lrow-name">{t.teamName}</span><span className="lrow-sub">League {t.leagueKey}</span></span>
+                    <span className="lrow-main"><span className="lrow-name">{t.teamName}</span><span className="lrow-sub">{t.leagueName ? t.leagueName + (t.teams ? ' · ' + t.teams + ' teams' : '') : 'League ' + t.leagueKey}</span></span>
                     <span className={'radio' + (on ? ' on' : '')}>{on && <Icon.check size={13} sw={3.5} />}</span>
                   </button>
                 );
@@ -822,6 +878,7 @@ function ConnectSheet({ league, week, conn, sleeperUser, setSleeperUser, setConn
           )}
           {espnMsg && <div className="sheet-note">{espnMsg}</div>}
           {yh.state === 'in' && <button className="pill-btn" onClick={yahooOff} disabled={busy}>Disconnect Yahoo</button>}
+          {yh.state === 'in' && c.teamId && <YahooUnmatched />}
           {!c.teamId && syncErr && <div className="banner err"><Icon.alert size={16} sw={2.5} /><span>{syncErr}</span></div>}
           <p className="sheet-note">Yahoo asks you to sign in on yahoo.com and gives this app read-only access to your fantasy lineups; your Yahoo password never reaches the app. Set up once (see app/README.md).</p>
         </>

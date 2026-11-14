@@ -11,7 +11,7 @@ const proj1 = n => (Math.round(n * 10) / 10).toFixed(1);
 
 // Every league's matchup at a glance: one summary strip, then a collapsible section per league with your starters,
 // their live scores and projected finishes, and your total against your opponent's.
-export default function LeagueBoard({ week, wk, names, board, synced = {} }) {
+export default function LeagueBoard({ week, wk, names, board, synced = {}, onReconnect }) {
   const colorOf = useLeagueColor();
   const proj = useProjections(week);
   const [openL, setOpenL] = useState([]);                      // leagues expanded (all start collapsed)
@@ -42,9 +42,10 @@ export default function LeagueBoard({ week, wk, names, board, synced = {} }) {
                 <span className={'hb-pill ' + g.tone}><i />{g.label}</span>
                 <span className={'chev' + (open ? ' open' : '')} aria-hidden="true"><Icon.chevron size={16} sw={2.5} /></span>
               </button>
+              {!open && <SyncNote failedOnly s={synced[name + ':' + week]} at={l && l.at} onReconnect={onReconnect && (() => onReconnect(name))} />}
               {open && (
                 <div className="hb-body">
-                  <SyncNote s={synced[name + ':' + week]} at={l && l.at} />
+                  <SyncNote s={synced[name + ':' + week]} at={l && l.at} onReconnect={onReconnect && (() => onReconnect(name))} />
                   {!has
                     ? <p className="hb-empty">No lineup for week {week} yet. Link this league or add starters from the Locker Room tab.</p>
                     : <Matchup l={l} o={o} week={week} board={board} />}
@@ -62,12 +63,13 @@ export default function LeagueBoard({ week, wk, names, board, synced = {} }) {
 }
 
 // Says when this league's points were last pulled, and warns loudly if the latest pull failed (the numbers shown are then old).
-function SyncNote({ s, at }) {
+function SyncNote({ s, at, onReconnect, failedOnly }) {
   const failed = s && s.ok === false;
+  if (failedOnly && !failed) return null;
   const when = at ? new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
   if (!failed && !when) return null;
   return failed
-    ? <div className="banner err hb-sync"><Icon.alert size={15} sw={2.5} /><span>Couldn't refresh this league{s.err ? ': ' + s.err : ''}.{when ? ' Showing points from ' + when + '.' : ''}</span></div>
+    ? <div className="banner err hb-sync"><Icon.alert size={15} sw={2.5} /><span>{s.code === 'backoff' || s.code === 'needs_reauth' ? s.err : 'Couldn\'t refresh this league' + (s.err ? ': ' + s.err.replace(/\.$/, '') : '') + '.'}{when ? ' Showing points from ' + when + '.' : ''}</span>{s.code === 'needs_reauth' && onReconnect && <button className="pill-btn primary hb-reconnect" onClick={onReconnect}>Reconnect Yahoo</button>}</div>
     : <div className="hb-updated">Points updated {when}</div>;
 }
 

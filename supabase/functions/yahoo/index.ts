@@ -4,11 +4,13 @@
 // the browser never talks to Yahoo directly. The app calls this function, which:
 //   authorize  -> builds the Yahoo sign-in URL for the user to visit
 //   exchange   -> trades the code Yahoo sends back for tokens, kept in the yahoo_tokens table (service role only)
-//   status     -> says whether this user has connected Yahoo
+//   status     -> says whether this user has connected Yahoo, or needs to reconnect (their refresh token stopped working)
 //   request    -> makes one allow-listed, read-only call to the Yahoo Fantasy API for this user
 //   disconnect -> forgets the user's tokens
 // Only signed-in users can call it (Supabase checks the sign-in token first). Replies are always HTTP 200 with
-// { ok: true, ... } or { ok: false, error }.
+// { ok: true, ... } or { ok: false, error }. Errors that matter to the app's polling carry more: error "needs_reauth"
+// (the user must sign in to Yahoo again), "not_connected", or "upstream_status" with Yahoo's own HTTP status (999 and
+// 429 mean slow down) and retryAfter seconds when Yahoo sent them.
 //
 // Setup: see app/README.md (Yahoo Fantasy). Secrets: YAHOO_CLIENT_ID, YAHOO_CLIENT_SECRET.
 // Optional secret YAHOO_REDIRECT_URIS: comma-separated pages Yahoo may send people back to (default: any https page).
@@ -18,12 +20,11 @@ const TOKEN_URL = 'https://api.login.yahoo.com/oauth2/get_token';
 const API = 'https://fantasysports.yahooapis.com/fantasy/v2/';
 
 // The only Yahoo calls the app can make: read-only fantasy football lookups.
-const ALLOWED: RegExp[] = [
+export const ALLOWED: RegExp[] = [
   /^game\/nfl$/,
-  /^users;use_login=1\/games;game_keys=\d{1,4}\/(leagues|teams)$/,
+  /^users;use_login=1\/games;game_keys=(nfl|\d{1,4})\/(leagues|teams)$/,
   /^league\/\d{1,4}\.l\.\d{1,10}\/(scoreboard;week=\d{1,2}|settings)$/,
-  /^team\/\d{1,4}\.l\.\d{1,10}\.t\.\d{1,3}\/roster;week=\d{1,2}$/,
-  /^league\/\d{1,4}\.l\.\d{1,10}\/players;player_keys=\d{1,4}\.p\.\d{1,10}(,\d{1,4}\.p\.\d{1,10}){0,24}\/stats;type=week;week=\d{1,2}$/
+  /^team\/\d{1,4}\.l\.\d{1,10}\.t\.\d{1,3}\/roster;week=\d{1,2}(\/players\/stats(;type=week;week=\d{1,2})?)?$/
 ];
 
 const cors = {
@@ -43,6 +44,7 @@ function userId(req: Request): string {
 
 type Deps = { env?: Record<string, string | undefined>; fetchImpl?: typeof fetch; now?: number };
 type Tokens = { access_token: string; refresh_token: string; expires_at: number };
+class TokenError extends Error { status = 0; invalid = false; }
 
 export async function handle(req: Request, deps: Deps = {}): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
@@ -64,18 +66,22 @@ export async function handle(req: Request, deps: Deps = {}): Promise<Response> {
   // ── tokens live in the yahoo_tokens table, readable only with the service role ──
   const dbBase = (env.SUPABASE_URL || '') + '/rest/v1/yahoo_tokens';
   const dbHeaders = { apikey: env.SUPABASE_SERVICE_ROLE_KEY || '', Authorization: 'Bearer ' + (env.SUPABASE_SERVICE_ROLE_KEY || ''), 'Content-Type': 'application/json' };
-  const readTokens = async (): Promise<Tokens | null> => {
-    const r = await doFetch(dbBase + '?user_id=eq.' + encodeURIComponent(uid) + '&select=access_token,refresh_token,expires_at', { headers: dbHeaders });
+  const readTokens = async (): Promise<(Tokens & { reauth: boolean }) | null> => {
+    const r = await doFetch(dbBase + '?user_id=eq.' + encodeURIComponent(uid) + '&select=access_token,refresh_token,expires_at,reauth_required', { headers: dbHeaders });
     if (!r.ok) throw new Error('db');
     const rows = await r.json();
-    return rows && rows[0] ? { access_token: rows[0].access_token, refresh_token: rows[0].refresh_token, expires_at: Number(rows[0].expires_at) || 0 } : null;
+    return rows && rows[0] ? { access_token: rows[0].access_token, refresh_token: rows[0].refresh_token, expires_at: Number(rows[0].expires_at) || 0, reauth: !!rows[0].reauth_required } : null;
   };
   const saveTokens = async (t: Tokens) => {
     const r = await doFetch(dbBase + '?on_conflict=user_id', {
       method: 'POST', headers: { ...dbHeaders, Prefer: 'resolution=merge-duplicates' },
-      body: JSON.stringify({ user_id: uid, ...t, updated_at: new Date(now).toISOString() })
+      body: JSON.stringify({ user_id: uid, ...t, reauth_required: false, updated_at: new Date(now).toISOString() })
     });
     if (!r.ok) throw new Error('db');
+  };
+  // The refresh token stopped working: keep the row (so the app can say "reconnect") but stop trying to use it.
+  const markReauth = async () => {
+    await doFetch(dbBase + '?user_id=eq.' + encodeURIComponent(uid), { method: 'PATCH', headers: dbHeaders, body: JSON.stringify({ reauth_required: true, updated_at: new Date(now).toISOString() }) });
   };
   const tokenCall = async (form: Record<string, string>) => {
     const r = await doFetch(TOKEN_URL, {
@@ -84,7 +90,12 @@ export async function handle(req: Request, deps: Deps = {}): Promise<Response> {
       body: new URLSearchParams(form).toString()
     });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok || !j.access_token) throw new Error(j.error_description || j.error || 'token');
+    if (!r.ok || !j.access_token) {
+      const e = new TokenError(j.error_description || j.error || 'token');
+      e.status = r.status;
+      e.invalid = /invalid_grant|invalid_token|expired|revoked/i.test(String(j.error || '') + ' ' + String(j.error_description || '')) || r.status === 400 || r.status === 401;   // Yahoo said no, as opposed to being unreachable
+      throw e;
+    }
     return j;
   };
 
@@ -97,7 +108,8 @@ export async function handle(req: Request, deps: Deps = {}): Promise<Response> {
     }
 
     if (action === 'status') {
-      return reply({ ok: true, connected: !!(await readTokens()), configured: !!(clientId && secret) });
+      const t = await readTokens();
+      return reply({ ok: true, connected: !!t && !t.reauth, needsReauth: !!t && t.reauth, configured: !!(clientId && secret) });
     }
 
     if (action === 'disconnect') {
@@ -117,22 +129,35 @@ export async function handle(req: Request, deps: Deps = {}): Promise<Response> {
     if (action === 'request') {
       const path = String(body.path || '');
       if (!ALLOWED.some(re => re.test(path))) return fail('That Yahoo lookup isn\'t allowed.');
-      let t = await readTokens();
-      if (!t) return fail('not_connected');
-      const refresh = async () => {
-        const j = await tokenCall({ grant_type: 'refresh_token', refresh_token: t!.refresh_token, redirect_uri: String(body.redirectUri || '') });
-        t = { access_token: j.access_token, refresh_token: j.refresh_token || t!.refresh_token, expires_at: now + (Number(j.expires_in) || 3600) * 1000 };
-        await saveTokens(t);
+      const row = await readTokens();
+      if (!row) return fail('not_connected');
+      if (row.reauth) return fail('needs_reauth');
+      let t: Tokens = row;
+      // Refreshes the one-hour access token. If Yahoo refuses the refresh token, the user has to sign in again.
+      const refresh = async (): Promise<boolean> => {
+        try {
+          const j = await tokenCall({ grant_type: 'refresh_token', refresh_token: t.refresh_token, redirect_uri: String(body.redirectUri || '') });
+          t = { access_token: j.access_token, refresh_token: j.refresh_token || t.refresh_token, expires_at: now + (Number(j.expires_in) || 3600) * 1000 };
+          await saveTokens(t);
+          return true;
+        } catch (e) {
+          if (e instanceof TokenError && e.invalid) { await markReauth(); return false; }
+          throw e;
+        }
       };
-      if (t.expires_at - 60000 < now) await refresh();
-      const call = () => doFetch(API + path + (path.includes('?') ? '&' : '?') + 'format=json', { headers: { Authorization: 'Bearer ' + t!.access_token, Accept: 'application/json' } });
+      if (t.expires_at - 60000 < now && !(await refresh())) return fail('needs_reauth');
+      const call = () => doFetch(API + path + (path.includes('?') ? '&' : '?') + 'format=json', { headers: { Authorization: 'Bearer ' + t.access_token, Accept: 'application/json' } });
       let r = await call();
-      if (r.status === 401) { await refresh(); r = await call(); }
-      if (r.status === 401 || r.status === 403) return fail('not_connected');
+      if (r.status === 401) { if (!(await refresh())) return fail('needs_reauth'); r = await call(); }
+      if (r.status === 401) { await markReauth(); return fail('needs_reauth'); }
+      if (!r.ok) {
+        const ra = Number(r.headers.get('retry-after'));
+        return reply({ ok: false, error: 'upstream_status', status: r.status, retryAfter: Number.isFinite(ra) && ra > 0 ? ra : undefined });
+      }
       const text = await r.text();
       let data: unknown;
-      try { data = JSON.parse(text); } catch (_e) { return fail('Yahoo answered with something other than data (' + r.status + ').'); }
-      return r.ok ? reply({ ok: true, data }) : fail('Yahoo answered with an error (' + r.status + ').');
+      try { data = JSON.parse(text); } catch (_e) { return reply({ ok: false, error: 'upstream_status', status: 200 }); }
+      return reply({ ok: true, data });
     }
 
     return fail('Unknown action.');

@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '17 9 * * *'     # nightly, so new players appear in the Yahoo id table
 
 permissions:
   contents: read
@@ -36,6 +38,8 @@ jobs:
       - run: node --experimental-strip-types --test ../supabase/functions/mfl/index.test.mjs
       - run: node --experimental-strip-types --test ../supabase/functions/podcast/index.test.mjs
       - run: node --experimental-strip-types --test ../supabase/functions/yahoo/index.test.mjs
+      - run: node --test ../scripts/build-playerids.test.mjs
+      - run: node ../scripts/build-playerids.mjs public/playerids.json     # Yahoo id -> Sleeper/ESPN id table (never fails the build)
       - run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}

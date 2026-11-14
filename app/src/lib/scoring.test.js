@@ -77,3 +77,11 @@ test('a linebacker in your lineup earns points from the plays he is in', async (
   const [m] = mp([play], tracked);
   assert.deepEqual([m.hits[0].role, m.hits[0].est], ['defender', 1.5]);
 });
+
+import { yahooRules } from './scoring.js';
+test('reads Yahoo stat modifiers into rules, ignoring unknown stats', () => {
+  const r = yahooRules([{ stat_id: '4', value: '0.04' }, { stat_id: '5', value: '6' }, { stat_id: '11', value: '0.5' }, { stat_id: '99', value: '7' }]);
+  assert.deepEqual([r.passYd, r.passTd, r.rec, r.rushTd], [0.04, 6, 0.5, 6]);
+  assert.equal(yahooRules([]), null);
+  assert.equal(yahooRules([{ stat_id: '99', value: '1' }]), null);
+});

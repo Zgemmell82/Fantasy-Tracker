@@ -26,6 +26,8 @@ create table if not exists public.yahoo_tokens (
   access_token text not null,
   refresh_token text not null,
   expires_at bigint not null default 0,
+  reauth_required boolean not null default false,   -- set when Yahoo refuses the refresh token: the user has to sign in again
   updated_at timestamptz not null default now()
 );
+alter table public.yahoo_tokens add column if not exists reauth_required boolean not null default false;
 alter table public.yahoo_tokens enable row level security;

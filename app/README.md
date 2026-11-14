@@ -21,10 +21,18 @@ Accounts use [Supabase](https://supabase.com) (free tier). One-time setup:
 Yahoo requires a sign-in ("OAuth") and keeps a secret key, so Yahoo leagues go through a Supabase Edge Function, `yahoo`. It is read-only, only for signed-in users, only talks to Yahoo's fantasy API, and keeps each user's Yahoo tokens in a table only the function can read. Set it up once:
 
 1. Go to https://developer.yahoo.com/apps/create/ and create an app: *Web Application*, permission **Fantasy Sports – Read**. For **Redirect URI** use the exact address of your app (for example `https://zgemmell82.github.io/Fantasy-Tracker/`). Copy the **Client ID** and **Client Secret**.
-2. In Supabase run the `yahoo_tokens` part of `supabase/schema.sql` (SQL Editor).
-3. Supabase → **Edge Functions → Deploy a new function**, name it exactly `yahoo`, paste `supabase/functions/yahoo/index.ts`, and deploy (leave **Verify JWT** on).
+2. In Supabase run the `yahoo_tokens` part of `supabase/schema.sql` (SQL Editor). **If you set Yahoo up before, run it again**: it adds the `reauth_required` column the reconnect feature needs.
+3. Supabase → **Edge Functions → Deploy a new function**, name it exactly `yahoo`, paste `supabase/functions/yahoo/index.ts`, and deploy (leave **Verify JWT** on). **If it was already deployed, paste and deploy the new version.**
 4. Edge Functions → **Secrets**: add `YAHOO_CLIENT_ID` and `YAHOO_CLIENT_SECRET`. Optional: `YAHOO_REDIRECT_URIS` (comma-separated pages Yahoo may send people back to).
-5. In the app: **Locker Room → Source → Yahoo → Connect Yahoo**, sign in at Yahoo, then pick your team.
+5. In the app: **Locker Room → a league → Source → Yahoo → Connect Yahoo** (or **Connect Yahoo** on the Yahoo card at the top of the Locker Room), sign in at Yahoo, then pick your team. One Yahoo sign-in covers every Yahoo league; link each app league to one of your Yahoo teams.
+
+How it behaves:
+- **Lineups and points** come from Yahoo as it reports them (`player_points`, `team_points`), so custom league scoring is respected and nothing is recomputed. Bench, IR and empty slots are left out, and a bye-week starter shows no points.
+- **Reconnecting**: Yahoo's login token lasts an hour and refreshes itself. If Yahoo refuses the refresh (you revoked access, or it expired), the league shows "Yahoo needs you to sign in again" with a **Reconnect Yahoo** button on The Huddle and in the Locker Room; the last points stay on screen until you do.
+- **Polling**: scores and rosters are cached for about 45 seconds during games (10 minutes otherwise), league settings for a day. The **Sync** button always asks Yahoo again. If Yahoo answers 999 or 429 (it's rate limiting) or has a server error, the app waits 30 seconds, then 1, 2, 4 minutes and so on up to 15, shared across your Yahoo leagues, and shows the last points meanwhile.
+- **Matching players**: Yahoo players are matched to Sleeper and ESPN ids using the DynastyProcess player id table (`scripts/build-playerids.mjs` builds `playerids.json` during the deploy, and nightly), then by name, team and position. Anyone who can't be matched still shows by name; the league's Source sheet lists them and they are logged in the browser console.
+- **Play-by-play estimates** for Yahoo leagues use the league's own scoring settings when Yahoo lists them.
+- I could not test any of this against Yahoo itself (no access from the build environment), so expect the first real sync to need a tweak. Stat ids for custom scoring and the exact JSON shapes are the most likely things to adjust.
 
 ### MyFantasyLeague helper (needed for MFL leagues)
 
@@ -92,7 +100,7 @@ npm run build    # production build in dist/
   - **Sleeper**: enter your username and pick the league.
   - **ESPN**: league ID and team ID. Private leagues go through the ESPN helper (see `../espn-helper/README.md`).
   - **MFL** (MyFantasyLeague): league ID, franchise ID and, for private leagues, an API key.
-  - **Yahoo**: sign in with Yahoo once (see the Yahoo helper above), then pick your team from the list.
+  - **Yahoo**: sign in with Yahoo once (see the Yahoo helper above), then pick your team from the list (shown with its Yahoo league name).
   - **FFPC**: no feed this app can read, so FFPC leagues are labelled and filled in by hand with **Edit**.
   - **By hand**: edit starters yourself.
 - Connected leagues sync when the app opens, when you switch weeks and when it returns to the foreground, at most once every 15 minutes. **Sync** in the header forces a refresh.

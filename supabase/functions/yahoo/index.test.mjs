@@ -14,11 +14,12 @@ function world({ row = null, yahooStatus = 200, tokenOk = true } = {}) {
     const json = (b, status = 200) => new Response(JSON.stringify(b), { status });
     if (u.includes('/rest/v1/yahoo_tokens')) {
       if (init.method === 'POST') { w.row = JSON.parse(init.body); return json({}, 201); }
+      if (init.method === 'PATCH') { if (w.row) w.row = { ...w.row, ...JSON.parse(init.body) }; return new Response(null, { status: 204 }); }
       if (init.method === 'DELETE') { w.row = null; return new Response(null, { status: 204 }); }
       return json(w.row ? [w.row] : []);
     }
     if (u.startsWith('https://api.login.yahoo.com/oauth2/get_token')) return tokenOk ? json({ access_token: 'new-access', refresh_token: 'new-refresh', expires_in: 3600 }) : json({ error: 'invalid_grant' }, 400);
-    if (u.startsWith('https://fantasysports.yahooapis.com/')) return json({ fantasy_content: { ok: true } }, yahooStatus);
+    if (u.startsWith('https://fantasysports.yahooapis.com/')) return yahooStatus > 599 ? { ok: false, status: yahooStatus, headers: new Headers(), text: async () => '' } : json({ fantasy_content: { ok: true } }, yahooStatus);   // Yahoo answers 999 when it is rate limiting; Response can't be built with that status
     return json({}, 404);
   };
   return w;
@@ -67,15 +68,15 @@ test('makes allow-listed read-only Yahoo calls with the saved token, and returns
   const y = w.calls.find(c => c.url.startsWith('https://fantasysports.yahooapis.com/'));
   assert.equal(y.url, 'https://fantasysports.yahooapis.com/fantasy/v2/league/461.l.12345/scoreboard;week=5?format=json');
   assert.equal(y.init.headers.Authorization, 'Bearer tok');
-  for (const path of ['game/nfl', 'users;use_login=1/games;game_keys=461/leagues', 'users;use_login=1/games;game_keys=461/teams', 'team/461.l.12345.t.3/roster;week=5',
-    'league/461.l.12345/players;player_keys=461.p.1,461.p.2/stats;type=week;week=5']) {
+  for (const path of ['game/nfl', 'users;use_login=1/games;game_keys=nfl/leagues', 'users;use_login=1/games;game_keys=nfl/teams', 'users;use_login=1/games;game_keys=461/teams',
+    'league/461.l.12345/settings', 'team/461.l.12345.t.3/roster;week=5', 'team/461.l.12345.t.3/roster;week=5/players/stats']) {
     assert.equal((await call({ action: 'request', path }, w)).ok, true, path);
   }
 });
 
 test('refuses anything else: other hosts, write-looking paths, other users\' data', async () => {
   const w = world({ row: { user_id: 'user-1', access_token: 'tok', refresh_token: 'ref', expires_at: NOW + 3600000 } });
-  for (const path of ['', '../../etc', 'league/461.l.1/transactions', 'team/461.l.1.t.1/roster', 'https://evil.example/', 'game/nfl/../x', 'league/461.l.12345/players;player_keys=' + Array.from({ length: 30 }, (_, i) => '461.p.' + i).join(',') + '/stats;type=week;week=5']) {
+  for (const path of ['', '../../etc', 'league/461.l.1/transactions', 'team/461.l.1.t.1/roster', 'https://evil.example/', 'game/nfl/../x', 'team/461.l.1.t.1/roster;week=5/players/ownership', 'team/461.l.1.t.1/roster;week=5/players/stats/../x']) {
     assert.equal((await call({ action: 'request', path }, w)).ok, false, path);
   }
   assert.equal(w.calls.some(c => c.url.startsWith('https://fantasysports.yahooapis.com/')), false);
@@ -89,14 +90,44 @@ test('refreshes an expired token before asking Yahoo, and says when the user is 
   assert.equal((await call({ action: 'request', path: 'game/nfl' }, world())).error, 'not_connected');
 });
 
-test('retries once with a fresh token when Yahoo rejects the old one, then gives up', async () => {
+test('retries once with a fresh token when Yahoo rejects the old one', async () => {
   let n = 0;
   const w = world({ row: { user_id: 'user-1', access_token: 'stale', refresh_token: 'ref', expires_at: NOW + 3600000 } });
   const inner = w.fetch;
   w.fetch = async (u, i) => { if (String(u).startsWith('https://fantasysports.yahooapis.com/') && n++ === 0) return new Response('{}', { status: 401 }); return inner(u, i); };
   assert.equal((await call({ action: 'request', path: 'game/nfl' }, w)).ok, true);
+  assert.equal(n, 2);                                                                  // the rejected call and the retry
+  assert.match(w.calls.find(c => c.url.includes('get_token')).init.body, /grant_type=refresh_token/);
+});
+
+test('when Yahoo refuses the refresh token, the user is told to reconnect and the function stops trying', async () => {
+  const w = world({ row: { user_id: 'user-1', access_token: 'old', refresh_token: 'dead', expires_at: NOW - 1000 }, tokenOk: false });
+  assert.equal((await call({ action: 'request', path: 'game/nfl' }, w)).error, 'needs_reauth');
+  assert.equal(w.row.reauth_required, true);
+  const calls = w.calls.length;
+  assert.equal((await call({ action: 'request', path: 'game/nfl' }, w)).error, 'needs_reauth');       // no more calls to Yahoo
+  assert.equal(w.calls.length, calls + 1);                                                              // only the token-table read
+  const st = await call({ action: 'status' }, w);
+  assert.deepEqual([st.connected, st.needsReauth], [false, true]);
+  // signing in again clears it
+  assert.equal((await call({ action: 'exchange', code: 'abc', redirectUri: 'https://me.github.io/app/' }, { ...w, fetch: world({ row: w.row }).fetch })).ok, true);
+});
+
+test('a 401 that survives a refresh also means reconnect', async () => {
   const dead = world({ row: { user_id: 'user-1', access_token: 'x', refresh_token: 'ref', expires_at: NOW + 3600000 }, yahooStatus: 401 });
-  assert.equal((await call({ action: 'request', path: 'game/nfl' }, dead)).error, 'not_connected');
+  assert.equal((await call({ action: 'request', path: 'game/nfl' }, dead)).error, 'needs_reauth');
+});
+
+test('passes Yahoo\'s own status through so the app can back off (999, 429, 5xx) with Retry-After', async () => {
+  for (const status of [999, 429, 503]) {
+    const w = world({ row: { user_id: 'user-1', access_token: 'tok', refresh_token: 'ref', expires_at: NOW + 3600000 }, yahooStatus: status });
+    const r = await call({ action: 'request', path: 'game/nfl' }, w);
+    assert.deepEqual([r.ok, r.error, r.status], [false, 'upstream_status', status]);
+  }
+  const w = world({ row: { user_id: 'user-1', access_token: 'tok', refresh_token: 'ref', expires_at: NOW + 3600000 } });
+  const inner = w.fetch;
+  w.fetch = async (u, i) => String(u).startsWith('https://fantasysports.yahooapis.com/') ? new Response('{}', { status: 429, headers: { 'Retry-After': '90' } }) : inner(u, i);
+  assert.equal((await call({ action: 'request', path: 'game/nfl' }, w)).retryAfter, 90);
 });
 
 test('explains failures instead of throwing', async () => {

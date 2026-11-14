@@ -35,6 +35,22 @@ export function espnRules(items) {
   return r;
 }
 
+// Yahoo league settings -> rules. stat_modifiers lists { stat_id, value } pairs. Stat ids (from Yahoo's NFL stat table, not
+// yet checked against a live league): 4 pass yds, 5 pass TD, 6 INT, 9 rush yds, 10 rush TD, 11 receptions, 12 rec yds,
+// 13 rec TD, 18 fumbles lost. Totals shown in the app always come from Yahoo itself; these only price play-by-play estimates.
+const YAHOO_STAT = { 4: 'passYd', 5: 'passTd', 6: 'passInt', 9: 'rushYd', 10: 'rushTd', 11: 'rec', 12: 'recYd', 13: 'recTd', 18: 'fumLost' };
+export function yahooRules(stats) {
+  if (!Array.isArray(stats) || !stats.length) return null;
+  const r = { ...DEFAULT_RULES };
+  let any = false;
+  stats.forEach(s => {
+    const k = YAHOO_STAT[Number(s && s.stat_id)];
+    const v = parseFloat(s && s.value);
+    if (k && Number.isFinite(v)) { r[k] = v; any = true; }
+  });
+  return any ? r : null;
+}
+
 // Standard / half / PPR, from reception points.
 export const formatOf = rules => !rules ? undefined : rules.rec >= 0.9 ? 'ppr' : rules.rec >= 0.4 ? 'half' : 'std';
 

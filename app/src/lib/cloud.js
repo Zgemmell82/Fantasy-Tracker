@@ -80,14 +80,28 @@ export async function radioAI(payload) {
 }
 
 // Talks to the account's "yahoo" function: Yahoo sign-in, status, and read-only Yahoo Fantasy lookups.
+// Failures are Errors with a `code`: 'not_connected', 'needs_reauth' (Yahoo refused the saved login: sign in again),
+// 'upstream_status' (Yahoo answered with an error: `status`, and `retryAfter` seconds when it said so; 999 and 429
+// mean "slow down"), 'not_configured', or 'helper' (the function itself couldn't be reached).
+export class YahooError extends Error {
+  constructor(message, code, extra = {}) { super(message); this.code = code; Object.assign(this, extra); }
+}
+
 export async function yahooCall(body) {
   const { data, error } = await supabase.functions.invoke('yahoo', { body });
   if (error) {
     const status = error.context && error.context.status;
-    if (status === 404) throw new Error('The Yahoo helper isn\'t installed on your Supabase project yet. Add the "yahoo" function from supabase/functions/yahoo (steps are in app/README.md).');
-    if (status === 401) throw new Error('Your sign-in has expired. Sign out and back in, then try again.');
-    throw new Error('Couldn\'t reach the Yahoo helper. Check your connection and try again.');
+    if (status === 404) throw new YahooError('The Yahoo helper isn\'t installed on your Supabase project yet. Add the "yahoo" function from supabase/functions/yahoo (steps are in app/README.md).', 'helper');
+    if (status === 401) throw new YahooError('Your sign-in has expired. Sign out and back in, then try again.', 'helper');
+    throw new YahooError('Couldn\'t reach the Yahoo helper. Check your connection and try again.', 'helper', { status: 0 });
   }
-  if (!data || !data.ok) throw new Error(!data ? 'The Yahoo helper returned something unexpected.' : data.error === 'not_connected' ? 'not_connected' : data.error === 'not_configured' ? 'Yahoo isn\'t set up on your Supabase project yet (add the YAHOO_CLIENT_ID and YAHOO_CLIENT_SECRET secrets; see app/README.md).' : (data.error || 'The Yahoo helper returned something unexpected.'));
+  if (!data) throw new YahooError('The Yahoo helper returned something unexpected.', 'helper');
+  if (!data.ok) {
+    if (data.error === 'not_connected') throw new YahooError('not_connected', 'not_connected');
+    if (data.error === 'needs_reauth') throw new YahooError('Yahoo needs you to sign in again.', 'needs_reauth');
+    if (data.error === 'not_configured') throw new YahooError('Yahoo isn\'t set up on your Supabase project yet (add the YAHOO_CLIENT_ID and YAHOO_CLIENT_SECRET secrets; see app/README.md).', 'not_configured');
+    if (data.error === 'upstream_status') throw new YahooError('Yahoo answered with an error (' + data.status + ').', 'upstream_status', { status: data.status, retryAfter: data.retryAfter });
+    throw new YahooError(data.error || 'The Yahoo helper returned something unexpected.', 'helper');
+  }
   return data;
 }
